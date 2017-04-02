@@ -1,8 +1,11 @@
 package worker;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -21,6 +24,8 @@ public class WebServer {
 	// wc=<window-columns>&wr=<window-rows>&
 	// coff=<column-offset>&roff=<row-offset>
 
+	public static String OUTPUT_FILE_NAME = "output.bmp";
+	
 	public static void main(String[] args) throws Exception {
 		HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
 		server.createContext("/r.html", new MyHandler());
@@ -33,15 +38,13 @@ public class WebServer {
 	static class MyHandler implements HttpHandler {
 		@Override
 		public void handle(HttpExchange t) throws IOException {
-			String response = "This was the query:" + t.getRequestURI().getQuery() + "##";
 			System.out.println("Received Resquest!");
 			Map<String, String> params = queryToMap(t.getRequestURI().getQuery());
-			String concat1 = new String();
-
+			String response = new String();
 			for (String key : params.keySet()) {
-				concat1 = concat1.concat(key + " " + params.get(key) + "\n");
+				response = response.concat(key + " " + params.get(key) + "\n");
 			}
-			String[] args = { params.get("f"), "nomeFicheiroOutput.bmp", params.get("sc"), params.get("sr"),
+			String[] args = { params.get("f"), OUTPUT_FILE_NAME, params.get("sc"), params.get("sr"),
 					params.get("wc"), params.get("wr"), params.get("coff"), params.get("roff") };
 			
 			try {
@@ -50,10 +53,13 @@ public class WebServer {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			System.out.println("HTTP_Response: " + concat1);
-			t.sendResponseHeaders(200, concat1.length());
+			File image = new File(OUTPUT_FILE_NAME);
+			
+			// System.out.println("HTTP_Response: " + response);
+			t.sendResponseHeaders(200, image.length());
 			OutputStream os = t.getResponseBody();
-			os.write(concat1.getBytes());
+			Files.copy(image.toPath(), os);
+			// os.write(image.getBytes());
 			os.close();
 		}
 	}
