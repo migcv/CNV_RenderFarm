@@ -39,7 +39,7 @@ public class WebServer {
 			String concat1 = new String();
 
 			for (String key : params.keySet()) {
-				concat1.concat(key + " " + params.get(key) + "\n");
+				concat1 = concat1.concat(key + " " + params.get(key) + "\n");
 			}
 			String[] args = { params.get("f"), "nomeFicheiroOutput.bmp", params.get("sc"), params.get("sr"),
 					params.get("wc"), params.get("wr"), params.get("coff"), params.get("roff") };
@@ -50,7 +50,7 @@ public class WebServer {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-
+			System.out.println("HTTP_Response: " + concat1);
 			t.sendResponseHeaders(200, concat1.length());
 			OutputStream os = t.getResponseBody();
 			os.write(concat1.getBytes());
