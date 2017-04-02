@@ -35,6 +35,7 @@ public class Main {
 	}
 
 	public static void main(String[] args) throws IOException, InterruptedException {
+		System.out.println("Executing main!");
 		if(args.length < 8) {
 			printUsage();
 			System.exit(0);
@@ -49,7 +50,7 @@ public class Main {
 		int wrows = Integer.parseInt(args[5]);
 		int coff = Integer.parseInt(args[6]);
 		int roff = -Integer.parseInt(args[7]);
-
+		System.out.println(inFile+" "+outFile+" "+scols+" "+srows+" "+wcols+" "+wrows+" "+coff+" "+roff);
 		// optional arguments
 		int i = 0;
 		for(String arg: args) {
@@ -66,7 +67,9 @@ public class Main {
 		}
 
 		RayTracer rayTracer = new RayTracer(scols, srows, wcols, wrows, coff, roff);
+		System.out.println("Created new RayTracer()");
 		rayTracer.readScene(inFile);
+		System.out.println("Read scene!");
 		if(DEBUG) {
 			while(true) {
 				Scanner scanner = new Scanner(System.in);
@@ -76,7 +79,9 @@ public class Main {
 				rayTracer.getPixelColor(col, row);
 			}
 		} else {
+			System.out.println("DRAWING!");
 			rayTracer.draw(outFile);
+			System.out.println("DRAWN");
 		}
 	}
 }

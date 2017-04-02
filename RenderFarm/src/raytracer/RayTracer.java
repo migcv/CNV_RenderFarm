@@ -191,21 +191,21 @@ public class RayTracer {
 
 	public void readScene(File file) throws FileNotFoundException {
 		Scanner scanner = new Scanner(file);
-
+		System.out.println("new Scanner()");
 		// read view
 		Point eye = readPoint(scanner);
 		Point center = readPoint(scanner);
 		Vector up = readVector(scanner);
 		double fovy = scanner.nextDouble();
 		camera = new Camera(eye, center, up, fovy, scols, srows);
-
+		System.out.println("new Camera()");
 		// read lights
 		int numLights = scanner.nextInt();
 		if(numLights > 0) lights.add(new AmbientLight(readPoint(scanner), readColor(scanner), scanner.nextFloat(), scanner.nextFloat(), scanner.nextFloat()));
 		for(int i=1;i<numLights;i++) {
 			lights.add(new Light(readPoint(scanner), readColor(scanner), scanner.nextFloat(), scanner.nextFloat(), scanner.nextFloat()));
 		}
-
+		System.out.println("After for's");
 		// read pigments
 		int numPigments = scanner.nextInt();
 		for(int i=0;i<numPigments;i++) {
@@ -228,7 +228,7 @@ public class RayTracer {
 				throw new UnsupportedOperationException("Unrecognized pigment: '" + name + "'.");
 			}
 		}
-
+		System.out.println("Read Pigments");
 		// read surface finishes
 		int numFins = scanner.nextInt();
 		for(int i=0;i<numFins;i++) {
