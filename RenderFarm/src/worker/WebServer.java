@@ -44,6 +44,16 @@ public class WebServer {
 			for (String key : params.keySet()) {
 				response = response.concat(key + " " + params.get(key) + "\n");
 			}
+			
+			if(params.get("f") == null){
+				response = "OK";
+				t.sendResponseHeaders(200, response.length());
+				OutputStream os = t.getResponseBody();
+				os.write(response.getBytes());
+				os.close();
+				return;
+			}
+				
 			String[] args = { params.get("f"), OUTPUT_FILE_NAME, params.get("sc"), params.get("sr"),
 					params.get("wc"), params.get("wr"), params.get("coff"), params.get("roff") };
 			
