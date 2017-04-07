@@ -1,0 +1,8 @@
+29 instructions in 12 basic blocks were executed in 3 methods.
+992704875 instructions in 158320287 basic blocks were executed in 48169699 methods.
+1987619322 instructions in 324900524 basic blocks were executed in 101104749 methods.
+576027316 instructions in 90323645 basic blocks were executed in 23152783 methods.
+668119951 instructions in 100059706 basic blocks were executed in 28994798 methods.
+raytracer/WebServer: 29 instructions in 12 basic blocks were executed in 3 methods.
+raytracer/Main: 668119939 instructions in 100059699 basic blocks were executed in 28994800 methods.
+raytracer/Main: 668119951 instructions in 100059706 basic blocks were executed in 28994798 methods.

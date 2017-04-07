@@ -9,7 +9,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -45,7 +45,7 @@ public class WebServer {
 			for (String key : params.keySet()) {
 				response = response.concat(key + " " + params.get(key) + "\n");
 			}
-			
+			System.out.println(Thread.currentThread().getId());
 			if(params.get("f") == null){
 				response = "OK";
 				t.sendResponseHeaders(200, response.length());

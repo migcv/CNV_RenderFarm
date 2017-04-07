@@ -24,8 +24,8 @@ public class GetStatsOfClassesExecuted {
 		    System.exit(-1);
 	        }
 	      	File file_in = new File(args[0]);
-		String tmppath = new String(file_in.getAbsolutePath());
-                String p = new String(tmppath.substring(0, tmppath.length() - 2));
+		String tmppath = new String(file_in.getAbsolutePath());                
+		String p = new String(tmppath.substring(0, tmppath.length() - 2));
 		processFiles(file_in, p); 
 	System.err.println("Totals: class size: " + grand_total + " const: " + const_total+ 
 							" fields: "+ field_total+ " interfaces: " + interface_total + " methods: " + methods_total + 
@@ -60,6 +60,7 @@ public class GetStatsOfClassesExecuted {
 			  	String name = new String(tmppath + "/" + ifnames[i]);
 
         		  	if (name.endsWith(".class")) {
+System.out.println("Name file " + name);
                         ClassInfo ci = new ClassInfo(name); /* BIT/highBIT call that reads/processes the class */
 					ClassFile cf = ci.getClassFile(); /* BIT/lowBIT call that returns the class file (BIT format)*/
 
