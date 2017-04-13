@@ -3,7 +3,7 @@ import java.util.*;
 import BIT.highBIT.*;
 import BIT.lowBIT.*;
 
-public class GetStatsOfClassesExecuted {
+public class MyToolTwo {
 	public static double grand_total = 0;
 	public static double const_total = 0;
 	public static double field_total = 0;
@@ -11,6 +11,8 @@ public class GetStatsOfClassesExecuted {
 	public static double methods_total = 0;
 	public static double bytecodes_total = 0;
 	public static double bytecodes_partial=0;
+
+    private static int i_count = 0, b_count = 0, m_count = 0;
 
         public static final String usage = "Usage: java GetSizeOfClassesExecuted ." 
 	    + "\nThis program finds all of the class files in this directory and prints"
@@ -24,12 +26,9 @@ public class GetStatsOfClassesExecuted {
 		    System.exit(-1);
 	        }
 	      	File file_in = new File(args[0]);
-		String tmppath = new String(file_in.getAbsolutePath());                
-
-		//String p = new String(tmppath.substring(0, tmppath.length() - 2));
-		String p =  tmppath;
-
-
+		String tmppath = new String(file_in.getAbsolutePath());
+        //String p = new String(tmppath.substring(0, tmppath.length() - 2));
+        String p = tmppath;
 		processFiles(file_in, p); 
 	System.err.println("Totals: class size: " + grand_total + " const: " + const_total+ 
 							" fields: "+ field_total+ " interfaces: " + interface_total + " methods: " + methods_total + 
@@ -45,6 +44,7 @@ public class GetStatsOfClassesExecuted {
   	}
 
   	public static void processFiles(File fi, String tmppath) {
+
 	   /* recursive method that finds all class files under this directory */
     	   try {
 		String ifnames[] = fi.list();
@@ -52,7 +52,7 @@ public class GetStatsOfClassesExecuted {
 
 			String tmpstr = new String(tmppath+"/"+ifnames[i]);
                         File file_tmp = new File(tmpstr);
-
+                        System.out.println("Proccessing file " + tmpstr);
         		if (file_tmp.isDirectory() == true) { /* search this directory for class files */
 				/* if (file_tmp.isDirectory()) would have worked above as well */
 
@@ -83,6 +83,25 @@ public class GetStatsOfClassesExecuted {
 						}
 					}
 					bytecodes_total += bytecodes_partial;
+				
+					// NEW CODE FROM ICOUNT
+
+	                // loop through all the routines
+	                // see java.util.Enumeration for more information on Enumeration class
+	                for (Enumeration e = ci.getRoutines().elements(); e.hasMoreElements(); ) {
+	                    Routine routine = (Routine) e.nextElement();
+						routine.addBefore("MyToolTwo", "mcount", new Integer(1));
+	                    
+	                    for (Enumeration b = routine.getBasicBlocks().elements(); b.hasMoreElements(); ) {
+	                        BasicBlock bb = (BasicBlock) b.nextElement();
+	                        bb.addBefore("MyToolTwo", "count", new Integer(bb.size()));
+	                    }
+	                }
+	                ci.addAfter("MyToolTwo", "printICount", ci.getClassName());
+	                ci.write(name);
+
+	                //END NEW CODE FROM ICOUNT
+
 
 
 
@@ -101,5 +120,17 @@ public class GetStatsOfClassesExecuted {
 		System.exit(-1);
 	   }
 	}
+    public static synchronized void printICount(String foo) {
+        System.out.println(foo + ": " + i_count + " instructions in " + b_count + " basic blocks were executed in " + m_count + " methods.");
+    }
+    public static synchronized void count(int incr) {
+        i_count += incr;
+        b_count++;
+    }
+
+    public static synchronized void mcount(int incr) {
+		m_count++;
+    }
+
 }
 		

@@ -12,17 +12,26 @@
  * University of Colorado at Boulder (303) 492-5647.
  */
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Enumeration;
+import java.util.HashMap;
+
 import BIT.highBIT.*;
-import java.io.*;
-import java.util.*;
 
 
 public class MyTool {
     private static PrintStream out = null;
-    private static int i_count = 0, b_count = 0, m_count = 0;
-    //private static HashMap<Integer, Integer> i_count = new HashMap<Integer, Integer>();
-    //private static HashMap<Integer, Integer> b_count = new HashMap<Integer, Integer>();
-    //private static HashMap<Integer, Integer> m_count = new HashMap<Integer, Integer>();
+    //private static int i_count = 0, b_count = 0, m_count = 0;
+    private static HashMap<Long, Integer> i_count = new HashMap<Long, Integer>();
+    private static HashMap<Long, Integer> b_count = new HashMap<Long, Integer>();
+    private static HashMap<Long, Integer> m_count = new HashMap<Long, Integer>();
+    private static HashMap<Long, String> request = new HashMap<Long, String>();
     
     /* main reads in all the files class files present in the input directory,
      * instruments them, and outputs them to the specified output directory.
@@ -57,24 +66,48 @@ public class MyTool {
     public static synchronized void printICount(String foo) {
         //System.out.println(i_count + " instructions in " + b_count + " basic blocks were executed in " + m_count + " methods.");
     	try {
-    		FileWriter log = new FileWriter("log.txt", true);
-			log.write(foo + ": " + i_count + " instructions in " + b_count + " basic blocks were executed in " + m_count + " methods.\n");
+    		FileWriter log = new FileWriter("log/" + getThreadId() +".txt", true);
+			log.write(foo + ": " + i_count.get(getThreadId()) + " instructions in " + 
+					b_count.get(getThreadId()) + " basic blocks were executed in " + m_count.get(getThreadId()) + " methods.\n");
 			log.close();
-			i_count = 0;
-			b_count = 0;
-			m_count = 0;
+			//i_count = 0;
+			//b_count = 0;
+			//m_count = 0;
+			i_count.put(getThreadId(), 0);
+    		b_count.put(getThreadId(), 0);
+    		m_count.put(getThreadId(), 0);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
     }
 
     public static synchronized void count(int incr) {
-        i_count += incr;
-        b_count++;
+        //i_count += incr;
+        //b_count++;
+    	if(i_count.get(getThreadId()) != null && b_count.get(getThreadId()) != null) {
+    		i_count.put(getThreadId(), i_count.get(getThreadId()) + incr);
+    		b_count.put(getThreadId(), b_count.get(getThreadId()) + 1);
+    	} else {
+    		i_count.put(getThreadId(), incr);
+    		b_count.put(getThreadId(), 1);
+    	}
     }
 
     public static synchronized void mcount(int incr) {
-		m_count++;
+		//m_count++;
+    	if(m_count.get(getThreadId()) != null) {
+    		m_count.put(getThreadId(), m_count.get(getThreadId()) + incr);
+    	} else {
+    		m_count.put(getThreadId(), incr);
+    	}
+    }
+    
+    public static synchronized void setRequest(String request) {
+    	MyTool.request.put(getThreadId(), request);
+    }
+    
+    public static synchronized Long getThreadId() {
+    	return Thread.currentThread().getId();
     }
 }
 

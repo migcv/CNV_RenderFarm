@@ -3,6 +3,7 @@ package raytracer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -10,6 +11,9 @@ import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -39,13 +43,8 @@ public class WebServer {
 	static class MyHandler implements HttpHandler {
 		@Override
 		public void handle(HttpExchange t) throws IOException {
-			System.out.println("Received Resquest!");
 			Map<String, String> params = queryToMap(t.getRequestURI().getQuery());
 			String response = new String();
-			for (String key : params.keySet()) {
-				response = response.concat(key + " " + params.get(key) + "\n");
-			}
-			System.out.println(Thread.currentThread().getId());
 			if(params.get("f") == null){
 				response = "OK";
 				t.sendResponseHeaders(200, response.length());
@@ -54,6 +53,9 @@ public class WebServer {
 				os.close();
 				return;
 			}
+
+			System.out.println(Thread.currentThread().getId() + " - Received Resquest: <" + t.getRequestURI().getQuery() + ">");
+			writeRequest(t.getRequestURI().getQuery());
 				
 			String[] args = { params.get("f"), OUTPUT_FILE_NAME, params.get("sc"), params.get("sr"),
 					params.get("wc"), params.get("wr"), params.get("coff"), params.get("roff") };
@@ -88,6 +90,20 @@ public class WebServer {
 			}
 		}
 		return result;
+	}
+
+	static void writeRequest(String query) {
+		try {
+			File file = new File("/home/ec2-user/CNV_RenderFarm/log/" + Thread.currentThread().getId() +".txt");
+			FileWriter log = new FileWriter(file, true);
+    		//FileWriter log = new FileWriter("/home/ec2-user/CNV_RenderFarm/log/" + Thread.currentThread().getId() +".txt", true);
+    		//DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+    		//Calendar cal = Calendar.getInstance();
+			log.write("###############################\n" + query + "\n");
+			log.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 }
