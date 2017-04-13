@@ -44,6 +44,7 @@ public class WebServer {
 		@Override
 		public void handle(HttpExchange t) throws IOException {
 			Map<String, String> params = queryToMap(t.getRequestURI().getQuery());
+			System.out.println("Connection from: " + t.getRemoteAddress());
 			String response = new String();
 			if(params.get("f") == null){
 				response = "OK";
@@ -94,7 +95,7 @@ public class WebServer {
 
 	static void writeRequest(String query) {
 		try {
-			File file = new File("/home/ec2-user/CNV_RenderFarm/log/WebServer" + Thread.currentThread().getId() +".txt");
+			File file = new File("/home/ec2-user/CNV_RenderFarm/log/" + Thread.currentThread().getId() +".txt");
 			FileWriter log = new FileWriter(file, true);
     		//FileWriter log = new FileWriter("/home/ec2-user/CNV_RenderFarm/log/" + Thread.currentThread().getId() +".txt", true);
     		//DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");

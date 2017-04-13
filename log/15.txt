@@ -1,0 +1,19 @@
+###############################
+f=test04.txt&sc=900&sr=600&wc=200&wr=200&coff=0&roff=500
+raytracer/Main - ICOUNT: 
+Number of methods:           15600158
+Number of basic blocks:      52322220
+Number of instructions:      338446745
+Average number of instructions per basic block: 6.468509
+Average number of instructions per method:      21.695086
+Average number of basic blocks per method:      3.3539546
+raytracer/Main - ALLOC: 
+new:            2640130
+newarray:       320000
+anewarray:      80001
+multianewarray: 40000
+raytracer/Main - LOAD_STORE: 
+Field load:    55080573
+Field store:   13400118
+Regular load:  136922121
+Regular store: 10760328
