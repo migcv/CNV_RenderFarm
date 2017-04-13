@@ -1,3 +1,0 @@
-###############################
-f=test04.txt&sc=900&sr=600&wc=200&wr=200&coff=0&roff=500
-raytracer/Main: 338446755 instructions in 52322222 basic blocks were executed in 15600160 methods.

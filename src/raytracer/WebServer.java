@@ -94,7 +94,7 @@ public class WebServer {
 
 	static void writeRequest(String query) {
 		try {
-			File file = new File("/home/ec2-user/CNV_RenderFarm/log/" + Thread.currentThread().getId() +".txt");
+			File file = new File("/home/ec2-user/CNV_RenderFarm/log/WebServer" + Thread.currentThread().getId() +".txt");
 			FileWriter log = new FileWriter(file, true);
     		//FileWriter log = new FileWriter("/home/ec2-user/CNV_RenderFarm/log/" + Thread.currentThread().getId() +".txt", true);
     		//DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
