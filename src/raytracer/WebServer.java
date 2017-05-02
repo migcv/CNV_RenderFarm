@@ -1,6 +1,5 @@
 package raytracer;
 
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileWriter;
@@ -30,51 +29,65 @@ public class WebServer {
 	// coff=<column-offset>&roff=<row-offset>
 
 	public static String OUTPUT_FILE_NAME = "output.bmp";
-	
-	public static void main(String[] args) throws Exception {
-		HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
-		server.createContext("/r.html", new MyHandler());
-		// server.setExecutor(null); // creates a default executor
-		server.setExecutor(Executors.newCachedThreadPool());
-		server.start();
-		System.out.println("Server up!");
+
+	public static void main(String[] args) {
+		try {
+			HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
+
+			server.createContext("/r.html", new MyHandler());
+			// server.setExecutor(null); // creates a default executor
+			server.setExecutor(Executors.newCachedThreadPool());
+			server.start();
+			System.out.println("Server up!");
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	static class MyHandler implements HttpHandler {
 		@Override
-		public void handle(HttpExchange t) throws IOException {
-			Map<String, String> params = queryToMap(t.getRequestURI().getQuery());
-			System.out.println("Connection from: " + t.getRemoteAddress());
-			String response = new String();
-			if(params.get("f") == null){
-				response = "OK";
-				t.sendResponseHeaders(200, response.length());
-				OutputStream os = t.getResponseBody();
-				os.write(response.getBytes());
-				os.close();
-				return;
-			}
-
-			System.out.println(Thread.currentThread().getId() + " - Received Resquest: <" + t.getRequestURI().getQuery() + ">");
-			writeRequest(t.getRequestURI().getQuery());
-				
-			String[] args = { params.get("f"), OUTPUT_FILE_NAME, params.get("sc"), params.get("sr"),
-					params.get("wc"), params.get("wr"), params.get("coff"), params.get("roff") };
-			
+		public void handle(HttpExchange t) {
 			try {
-				Main.main(args);
-			} catch (InterruptedException e) {
+				Map<String, String> params = queryToMap(t.getRequestURI().getQuery());
+				System.out.println("Connection from: " + t.getRemoteAddress());
+				String response = new String();
+				if (params.get("f") == null) {
+					response = "OK";
+					t.sendResponseHeaders(200, response.length());
+					OutputStream os = t.getResponseBody();
+					os.write(response.getBytes());
+					os.close();
+					return;
+				}
+
+				System.out.println(Thread.currentThread().getId() + " - Received Resquest: <"
+						+ t.getRequestURI().getQuery() + ">");
+				writeRequest(t.getRequestURI().getQuery());
+
+				String[] args = { params.get("f"), OUTPUT_FILE_NAME, params.get("sc"), params.get("sr"),
+						params.get("wc"), params.get("wr"), params.get("coff"), params.get("roff") };
+
+				try {
+					Main.main(args);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				File image = new File(OUTPUT_FILE_NAME);
+
+				// System.out.println("HTTP_Response: " + response);
+
+				t.sendResponseHeaders(200, image.length());
+
+				OutputStream os = t.getResponseBody();
+				Files.copy(image.toPath(), os);
+				// os.write(image.getBytes());
+				os.close();
+			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			File image = new File(OUTPUT_FILE_NAME);
-			
-			// System.out.println("HTTP_Response: " + response);
-			t.sendResponseHeaders(200, image.length());
-			OutputStream os = t.getResponseBody();
-			Files.copy(image.toPath(), os);
-			// os.write(image.getBytes());
-			os.close();
 		}
 	}
 
@@ -95,11 +108,14 @@ public class WebServer {
 
 	static void writeRequest(String query) {
 		try {
-			File file = new File("/home/ec2-user/CNV_RenderFarm/log/" + Thread.currentThread().getId() +".txt");
+			File file = new File("/home/ec2-user/CNV_RenderFarm/log/" + Thread.currentThread().getId() + ".txt");
 			FileWriter log = new FileWriter(file, true);
-    		//FileWriter log = new FileWriter("/home/ec2-user/CNV_RenderFarm/log/" + Thread.currentThread().getId() +".txt", true);
-    		//DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-    		//Calendar cal = Calendar.getInstance();
+			// FileWriter log = new
+			// FileWriter("/home/ec2-user/CNV_RenderFarm/log/" +
+			// Thread.currentThread().getId() +".txt", true);
+			// DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd
+			// HH:mm:ss");
+			// Calendar cal = Calendar.getInstance();
 			log.write("###############################\n" + query + "\n");
 			log.close();
 		} catch (IOException e) {
