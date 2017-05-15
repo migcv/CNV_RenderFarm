@@ -58,10 +58,22 @@ public class MyTool {
                     for (Enumeration b = routine.getBasicBlocks().elements(); b.hasMoreElements(); ) {
                         BasicBlock bb = (BasicBlock) b.nextElement();
                         bb.addBefore("MyTool", "count", new Integer(bb.size()));
+
+                        for(int address = bb.getStartAddress(); address <= bb.getEndAddress(); address++) {
+                            InstructionArray instructionArray = routine.getInstructionArray();
+                            Instruction instruction = instructionArray.elementAt(address);
+                            int opcode = instruction.getOpcode();
+                            if (opcode == InstructionTable.getfield)
+                                instruction.addBefore("MyTool", "LSFieldCount", new Integer(0));
+                            else if (opcode == InstructionTable.putfield)
+                                instruction.addBefore("MyTool", "LSFieldCount", new Integer(1));
+
+                        }
                     }
 					/*
                      * 	StatisticTool -load_store
                      */
+					/*
 					for (Enumeration instrs = (routine.getInstructionArray()).elements(); instrs.hasMoreElements(); ) {
 						Instruction instr = (Instruction) instrs.nextElement();
 						int opcode=instr.getOpcode();
@@ -78,7 +90,8 @@ public class MyTool {
 								instr.addBefore("MyTool", "LSCount", new Integer(1));
 							}
 						}*/
-					}
+					//}
+
                 }   
                 /*
                  * 	ICount
@@ -127,8 +140,8 @@ public class MyTool {
     	try {
 			FileWriter log = new FileWriter("log/" + getThreadId() +".txt", true);
 			log.write(foo + " - LOAD_STORE: " + "\n"
-					+ "Field load:    " + (fieldloadcount.get(getThreadId()) != null ? fieldloadcount.get(getThreadId()) : "0") + "\n"
-					+ "Field store:   " + (fieldstorecount.get(getThreadId()) != null ? fieldstorecount.get(getThreadId()) : "0") + "\n"
+					+ "Field load:::    " + (fieldloadcount.get(getThreadId()) != null ? fieldloadcount.get(getThreadId()) : "0") + "\n"
+					+ "Field store:::  " + (fieldstorecount.get(getThreadId()) != null ? fieldstorecount.get(getThreadId()) : "0") + "\n"
 					+ "Regular load:  " + (loadcount.get(getThreadId()) != null ? loadcount.get(getThreadId()) : "0") + "\n"
 					+ "Regular store: " + (storecount.get(getThreadId()) != null ? storecount.get(getThreadId()) : "0") + "\n");
 		
