@@ -33,7 +33,6 @@ public class MyTool {
     private static ConcurrentHashMap<Long, Long> storecount = new ConcurrentHashMap<Long, Long>();
     private static ConcurrentHashMap<Long, Long> fieldloadcount = new ConcurrentHashMap<Long, Long>();
     private static ConcurrentHashMap<Long, Long> fieldstorecount = new ConcurrentHashMap<Long, Long>();
-    private static int loadCounter;
 
     public static void main(String argv[]) {
         File file_in = new File(argv[0]);
@@ -42,7 +41,9 @@ public class MyTool {
         String infilenames[] = file_in.list();
         for (int i = 0; i < infilenames.length; i++) {
             String filename = infilenames[i];
-            if (filename.endsWith(".class")) {
+            //if (filename.equals("Main.class") || filename.equals("Camera.class") || filename.equals("Matrix.class") || filename.equals("Vector.class")) {
+            if (filename.equals("Main.class") || filename.equals("RayTracer.class")) {
+		System.out.println("filename-> " + filename);
                 // create class info object
                 String in_filename = file_in.getAbsolutePath() + System.getProperty("file.separator") + filename;
                 String out_filename = file_out.getAbsolutePath() + System.getProperty("file.separator") + filename;
@@ -58,6 +59,7 @@ public class MyTool {
                     for (Enumeration b = routine.getBasicBlocks().elements(); b.hasMoreElements(); ) {
                         BasicBlock bb = (BasicBlock) b.nextElement();
 
+                        int loadCounter = 0;
                         for(int address = bb.getStartAddress(); address <= bb.getEndAddress(); address++) {
                             InstructionArray instructionArray = routine.getInstructionArray();
                             Instruction instruction = instructionArray.elementAt(address);
@@ -73,8 +75,13 @@ public class MyTool {
                         }
 
                         // only instrument a basic block if it has 10 or more load instructions
-                        if(loadCounter >= 10)
+                        //if(loadCounter >= 10)
+                        //if(loadCounter >= 6)
+                        System.out.println(bb.getEndAddress() - bb.getStartAddress());
+                        if((bb.getEndAddress() - bb.getStartAddress()) > 2)
                             bb.addBefore("MyTool", "count", new Integer(bb.size()));
+                            
+                        
                     }
 
                 }
@@ -129,7 +136,6 @@ public class MyTool {
                 i_count.put(getThreadId(), new Long(incr));
                 b_count.put(getThreadId(), new Long(1));
             }
-            loadCounter = 0;
         }
     }
     /*

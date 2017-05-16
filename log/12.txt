@@ -1,0 +1,76 @@
+###############################
+f=test04.txt&sc=400&sr=300&wc=400&wr=300&coff=0&roff=0
+###############################
+f=test04.txt&sc=400&sr=300&wc=400&wr=300&coff=0&roff=0
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      93999171
+Number of instructions:      247461572
+Average number of instructions per basic block: 2.6325932
+raytracer/Main - LOAD_STORE: 
+Field load:    12597139
+Field store:  1417305
+###############################
+f=test04.txt&sc=400&sr=300&wc=400&wr=300&coff=0&roff=0
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      93999171
+Number of instructions:      247461572
+Average number of instructions per basic block: 2.6325932
+raytracer/Main - LOAD_STORE: 
+Field load:    12597139
+Field store:  1417305
+###############################
+f=test04.txt&sc=20000&sr=15000&wc=3250&wr=2500&coff=5000&roff=6500
+###############################
+f=test04.txt&sc=400&sr=300&wc=400&wr=300&coff=0&roff=0
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      0
+Number of instructions:      0
+Average number of instructions per basic block: 0.0
+raytracer/Main - LOAD_STORE: 
+Field load:    12597139
+Field store:  1417305
+###############################
+f=test04.txt&sc=400&sr=300&wc=400&wr=300&coff=0&roff=0
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      0
+Number of instructions:      0
+Average number of instructions per basic block: 0.0
+raytracer/Main - LOAD_STORE: 
+Field load:    12597139
+Field store:  1417305
+###############################
+f=test04.txt&sc=400&sr=300&wc=400&wr=300&coff=0&roff=0
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      0
+Number of instructions:      0
+Average number of instructions per basic block: 0.0
+raytracer/Main - LOAD_STORE: 
+Field load:    12597139
+Field store:  1417305
+############################### > 3
+f=test04.txt&sc=400&sr=300&wc=400&wr=300&coff=0&roff=0
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      18 137 350
+Number of instructions:      99 972 651
+Average number of instructions per basic block: 5.5119767
+raytracer/Main - LOAD_STORE: 
+Field load:    12597139
+Field store:  1417305
+############################### TODOS
+f=test04.txt&sc=400&sr=300&wc=400&wr=300&coff=0&roff=0
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      93 999 171
+Number of instructions:      247 461 572
+Average number of instructions per basic block: 2.6325932
+raytracer/Main - LOAD_STORE: 
+Field load:    12597139
+Field store:  1417305
+###############################
+f=test04.txt&sc=400&sr=300&wc=400&wr=300&coff=0&roff=0
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      24030376
+Number of instructions:      123544755
+Average number of instructions per basic block: 5.141191
+raytracer/Main - LOAD_STORE: 
+Field load:    12597139
+Field store:  1417305

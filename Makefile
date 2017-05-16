@@ -7,6 +7,7 @@ all:
 
 clean:
 	$(RM) src/raytracer/*.class src/raytracer/pigments/*.class src/raytracer/shapes/*.class
+	$(RM) src/raytracerBIT/raytracer/*.class
 
 run:
 	java MyTool src/raytracer/ src/raytracerBIT/raytracer
