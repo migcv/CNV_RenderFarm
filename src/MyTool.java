@@ -1,24 +1,39 @@
-/* ICount.java
- * Sample program using BIT -- counts the number of instructions executed.
- *
- * Copyright (c) 1997, The Regents of the University of Colorado. All
- * Rights Reserved.
- * 
- * Permission to use and copy this software and its documentation for
- * NON-COMMERCIAL purposes and without fee is hereby granted provided
- * that this copyright notice appears in all copies. If you wish to use
- * or wish to have others use BIT for commercial purposes please contact,
- * Stephen V. O'Neil, Director, Office of Technology Transfer at the
- * University of Colorado at Boulder (303) 492-5647.
- */
+
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import BIT.highBIT.*;
+
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.regions.Region;
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
+import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
+import com.amazonaws.services.dynamodbv2.model.Condition;
+import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
+import com.amazonaws.services.dynamodbv2.model.DescribeTableRequest;
+import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
+import com.amazonaws.services.dynamodbv2.model.KeyType;
+import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughput;
+import com.amazonaws.services.dynamodbv2.model.PutItemRequest;
+import com.amazonaws.services.dynamodbv2.model.PutItemResult;
+import com.amazonaws.services.dynamodbv2.model.ScalarAttributeType;
+import com.amazonaws.services.dynamodbv2.model.ScanRequest;
+import com.amazonaws.services.dynamodbv2.model.ScanResult;
+import com.amazonaws.services.dynamodbv2.model.TableDescription;
+import com.amazonaws.services.dynamodbv2.util.TableUtils;
 
 public class MyTool {
     /*
@@ -29,10 +44,14 @@ public class MyTool {
     /*
      *  StatisticTool -load_store
      */
-    private static ConcurrentHashMap<Long, Long> loadcount = new ConcurrentHashMap<Long, Long>();
-    private static ConcurrentHashMap<Long, Long> storecount = new ConcurrentHashMap<Long, Long>();
     private static ConcurrentHashMap<Long, Long> fieldloadcount = new ConcurrentHashMap<Long, Long>();
     private static ConcurrentHashMap<Long, Long> fieldstorecount = new ConcurrentHashMap<Long, Long>();
+    
+    private static ConcurrentHashMap<Long, Map<String, String>> request = new ConcurrentHashMap<Long, Map<String, String>>();
+    
+    private static AmazonDynamoDBClient dynamoDB;
+    
+    private static String tableName = "mss";
 
     public static void main(String argv[]) {
         File file_in = new File(argv[0]);
@@ -84,13 +103,14 @@ public class MyTool {
 
                 }
                 /*
-                 *  ICount
+                 *  Write on File
                  */
-                ci.addAfter("MyTool", "printICount", ci.getClassName());
+                //ci.addAfter("MyTool", "printICount", ci.getClassName());
+                //ci.addAfter("MyTool", "printLoadStore", ci.getClassName());
                 /*
-                 *  StatisticTool -load_store
+                 * Write on DataBase
                  */
-                ci.addAfter("MyTool", "printLoadStore", ci.getClassName());
+                ci.addAfter("MyTool", "writeDB",  ci.getClassName());
                 ci.write(out_filename);
             }
         }
@@ -179,8 +199,69 @@ public class MyTool {
     /*
      *  Auxiliar methods
      */
+    public static synchronized void writeDB(String foo) {
+    	init();
+    	if(request.get(getThreadId()) == null) {
+    		System.out.println("NULL");
+    	}
+    	System.out.println("THREAD > " + getThreadId() + " | Writting on " + tableName);
+    	Map<String, AttributeValue> item = newItem(request.get(getThreadId()).get("f"), request.get(getThreadId()).get("sc"), request.get(getThreadId()).get("sr"), request.get(getThreadId()).get("wc"), request.get(getThreadId()).get("wr"), request.get(getThreadId()).get("coff"), request.get(getThreadId()).get("roff"), 2);
+        PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
+        PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
+        
+
+        fieldloadcount.put(getThreadId(), new Long(0));
+        fieldstorecount.put(getThreadId(), new Long(0));
+        i_count.put(getThreadId(), new Long(0));
+        b_count.put(getThreadId(), new Long(0));
+        
+        System.out.println("Result: " + putItemResult);
+    }
+    
     public static synchronized Long getThreadId() {
         return Thread.currentThread().getId();
+    }
+    
+    public static synchronized void writeRequest(Map<String, String> r) {
+    	System.out.println("THREAD > " + getThreadId() + " | " + r.get("f"));
+    	request.put(getThreadId(), r);
+    }
+    
+    private static void init() {
+        /*
+         * The ProfileCredentialsProvider will return your [default]
+         * credential profile by reading from the credentials file located at
+         * (~/.aws/credentials).
+         */
+        AWSCredentials credentials = null;
+        try {
+            credentials = new ProfileCredentialsProvider().getCredentials();
+        } catch (Exception e) {
+            throw new AmazonClientException(
+                    "Cannot load the credentials from the credential profiles file. " +
+                    "Please make sure that your credentials file is at the correct " +
+                    "location (~/.aws/credentials), and is in valid format.",
+                    e);
+        }
+        dynamoDB = new AmazonDynamoDBClient(credentials);
+        Region usWest2 = Region.getRegion(Regions.US_WEST_2);
+        dynamoDB.setRegion(usWest2);
+    }
+    
+    private static Map<String, AttributeValue> newItem(String filename, String scols, String srows, String wcols, String wrows, String coff, String roff, int rank) {
+        Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
+        item.put("id", new AttributeValue(UUID.randomUUID().toString()));
+        item.put("filename", new AttributeValue(filename));
+        item.put("scols", new AttributeValue(scols));
+        item.put("srows", new AttributeValue(srows));
+        item.put("wcols", new AttributeValue(wcols));
+        item.put("wrows", new AttributeValue(wrows));
+        item.put("coff", new AttributeValue(coff));
+        item.put("roff", new AttributeValue(roff));
+        
+        item.put("rank", new AttributeValue().withN(Integer.toString(rank)));
+
+        return item;
     }
 }
 
