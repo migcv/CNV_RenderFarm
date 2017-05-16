@@ -42,7 +42,7 @@ public class MyTool {
         for (int i = 0; i < infilenames.length; i++) {
             String filename = infilenames[i];
             //if (filename.equals("Main.class") || filename.equals("Camera.class") || filename.equals("Matrix.class") || filename.equals("Vector.class")) {
-            if (filename.equals("Main.class") || filename.equals("RayTracer.class")) {
+            if (filename.equals("Main.class") || filename.equals("RayTracer.class") || filename.equals("Matrix.class") || filename.equals("Vector.class")) {
 		System.out.println("filename-> " + filename);
                 // create class info object
                 String in_filename = file_in.getAbsolutePath() + System.getProperty("file.separator") + filename;
@@ -60,7 +60,7 @@ public class MyTool {
                         BasicBlock bb = (BasicBlock) b.nextElement();
 
                         int loadCounter = 0;
-                        for(int address = bb.getStartAddress(); address <= bb.getEndAddress(); address++) {
+                        for(int address = bb.getStartAddress(); address <= bb.getEndAddress(); address += 2) {
                             InstructionArray instructionArray = routine.getInstructionArray();
                             Instruction instruction = instructionArray.elementAt(address);
                             int opcode = instruction.getOpcode();
@@ -75,13 +75,11 @@ public class MyTool {
                         }
 
                         // only instrument a basic block if it has 10 or more load instructions
-                        //if(loadCounter >= 10)
-                        //if(loadCounter >= 6)
-                        System.out.println(bb.getEndAddress() - bb.getStartAddress());
-                        if((bb.getEndAddress() - bb.getStartAddress()) > 2)
+                        //System.out.println(bb.getEndAddress() - bb.getStartAddress());
+                        //if((bb.getEndAddress() - bb.getStartAddress()) > 3)
+                    	//if(loadCounter >= 10)
+                        if(loadCounter >= 7)
                             bb.addBefore("MyTool", "count", new Integer(bb.size()));
-                            
-                        
                     }
 
                 }

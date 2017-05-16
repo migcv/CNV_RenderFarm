@@ -1,0 +1,18 @@
+###############################
+f=test04.txt&sc=8000&sr=6000&wc=1600&wr=1200&coff=0&roff=6400
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      185679460
+Number of instructions:      966302089
+Average number of instructions per basic block: 5.204141
+raytracer/Main - LOAD_STORE: 
+Field load:    96978851
+Field store:  9600011
+###############################
+f=test04.txt&sc=8000&sr=6000&wc=1600&wr=1200&coff=0&roff=6400
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      1919959
+Number of instructions:      334072866
+Average number of instructions per basic block: 174.0
+raytracer/Main - LOAD_STORE: 
+Field load:    2308917176
+Field store:  490609166
