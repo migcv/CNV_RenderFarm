@@ -33,13 +33,13 @@ public class MyTool {
     private static ConcurrentHashMap<Long, Long> storecount = new ConcurrentHashMap<Long, Long>();
     private static ConcurrentHashMap<Long, Long> fieldloadcount = new ConcurrentHashMap<Long, Long>();
     private static ConcurrentHashMap<Long, Long> fieldstorecount = new ConcurrentHashMap<Long, Long>();
-    
+    private static int loadCounter;
+
     public static void main(String argv[]) {
         File file_in = new File(argv[0]);
         File file_out = new File(argv[1]);
-        
+
         String infilenames[] = file_in.list();
-        
         for (int i = 0; i < infilenames.length; i++) {
             String filename = infilenames[i];
             if (filename.endsWith(".class")) {
@@ -47,7 +47,7 @@ public class MyTool {
                 String in_filename = file_in.getAbsolutePath() + System.getProperty("file.separator") + filename;
                 String out_filename = file_out.getAbsolutePath() + System.getProperty("file.separator") + filename;
                 ClassInfo ci = new ClassInfo(in_filename);
-                
+
                 // loop through all the routines
                 // see java.util.Enumeration for more information on Enumeration class
                 for (Enumeration e = ci.getRoutines().elements(); e.hasMoreElements(); ) {
@@ -57,42 +57,27 @@ public class MyTool {
                      */
                     for (Enumeration b = routine.getBasicBlocks().elements(); b.hasMoreElements(); ) {
                         BasicBlock bb = (BasicBlock) b.nextElement();
-                        bb.addBefore("MyTool", "count", new Integer(bb.size()));
 
                         for(int address = bb.getStartAddress(); address <= bb.getEndAddress(); address++) {
                             InstructionArray instructionArray = routine.getInstructionArray();
                             Instruction instruction = instructionArray.elementAt(address);
                             int opcode = instruction.getOpcode();
-                            if (opcode == InstructionTable.getfield)
+                            if (opcode == InstructionTable.getfield){
+                                loadCounter++;
                                 instruction.addBefore("MyTool", "LSFieldCount", new Integer(0));
-                            else if (opcode == InstructionTable.putfield)
+                            }
+                            else if (opcode == InstructionTable.putfield){
                                 instruction.addBefore("MyTool", "LSFieldCount", new Integer(1));
+                            }
 
                         }
-                    }
-                    /*
-                     *  StatisticTool -load_store
-                     */
-                    /*
-                    for (Enumeration instrs = (routine.getInstructionArray()).elements(); instrs.hasMoreElements(); ) {
-                        Instruction instr = (Instruction) instrs.nextElement();
-                        int opcode=instr.getOpcode();
-                        if (opcode == InstructionTable.getfield)
-                            instr.addBefore("MyTool", "LSFieldCount", new Integer(0));
-                        else if (opcode == InstructionTable.putfield)
-                            instr.addBefore("MyTool", "LSFieldCount", new Integer(1));
-                        /*else {
-                            short instr_type = InstructionTable.InstructionTypeTable[opcode];
-                            if (instr_type == InstructionTable.LOAD_INSTRUCTION) {
-                                instr.addBefore("MyTool", "LSCount", new Integer(0));
-                            }
-                            else if (instr_type == InstructionTable.STORE_INSTRUCTION) {
-                                instr.addBefore("MyTool", "LSCount", new Integer(1));
-                            }
-                        }*/
-                    //}
 
-                }   
+                        // only instrument a basic block if it has 10 or more load instructions
+                        if(loadCounter >= 10)
+                            bb.addBefore("MyTool", "count", new Integer(bb.size()));
+                    }
+
+                }
                 /*
                  *  ICount
                  */
@@ -104,7 +89,7 @@ public class MyTool {
                 ci.write(out_filename);
             }
         }
-    }    
+    }
     /*
      *  ICount methods
      */
@@ -112,25 +97,39 @@ public class MyTool {
         try {
             FileWriter log = new FileWriter("log/" + getThreadId() +".txt", true);
             log.write(foo + " - ICOUNT: " + "\n"
-                    + "Number of basic blocks:      " + b_count.get(getThreadId()) + "\n" 
-                    + "Number of instructions:      " + i_count.get(getThreadId()) + "\n");
-            float instr_per_bb = (float) i_count.get(getThreadId()) / (float) b_count.get(getThreadId());
+                    + "Number of basic blocks:      " + (b_count.get(getThreadId()) != null ? b_count.get(getThreadId()) : "0") + "\n"
+                    + "Number of instructions:      " + (i_count.get(getThreadId()) != null ? i_count.get(getThreadId()) : "0") + "\n");
+            float instr_per_bb = 0;
+            if(i_count.get(getThreadId()) != null && b_count.get(getThreadId()) != null){
+                instr_per_bb = (float) i_count.get(getThreadId()) / (float) b_count.get(getThreadId());
+            }
             log.write("Average number of instructions per basic block: " + instr_per_bb + "\n");
+            System.out.println("ICOUNT: " + "\n"
+                    + "Number of basic blocks:      " + (b_count.get(getThreadId()) != null ? b_count.get(getThreadId()) : "0") + "\n"
+                    + "Number of instructions:      " + (i_count.get(getThreadId()) != null ? i_count.get(getThreadId()) : "0") + "\n"
+                    + "Average number of instructions per basic block: " + instr_per_bb + "\n");
             log.close();
+
+            //reset hashmaps for next request
             i_count.put(getThreadId(), new Long(0));
             b_count.put(getThreadId(), new Long(0));
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
-    
+
     public static synchronized void count(int incr) {
-        if(i_count.get(getThreadId()) != null && b_count.get(getThreadId()) != null) {
-            i_count.put(getThreadId(), i_count.get(getThreadId()) + incr);
-            b_count.put(getThreadId(), b_count.get(getThreadId()) + 1);
-        } else {
-            i_count.put(getThreadId(), new Long(incr));
-            b_count.put(getThreadId(), new Long(1));
+        if(fieldloadcount.get(getThreadId()) != null && fieldloadcount.get(getThreadId()) > 50000) {
+
+
+            if(i_count.get(getThreadId()) != null && b_count.get(getThreadId()) != null) {
+                i_count.put(getThreadId(), i_count.get(getThreadId()) + incr);
+                b_count.put(getThreadId(), b_count.get(getThreadId()) + 1);
+            } else {
+                i_count.put(getThreadId(), new Long(incr));
+                b_count.put(getThreadId(), new Long(1));
+            }
+            loadCounter = 0;
         }
     }
     /*
@@ -140,10 +139,14 @@ public class MyTool {
         try {
             FileWriter log = new FileWriter("log/" + getThreadId() +".txt", true);
             log.write(foo + " - LOAD_STORE: " + "\n"
-                    + "Field load:::    " + (fieldloadcount.get(getThreadId()) != null ? fieldloadcount.get(getThreadId()) : "0") + "\n"
-                    + "Field store:::  " + (fieldstorecount.get(getThreadId()) != null ? fieldstorecount.get(getThreadId()) : "0") + "\n"
-                    + "Regular load:  " + (loadcount.get(getThreadId()) != null ? loadcount.get(getThreadId()) : "0") + "\n"
-                    + "Regular store: " + (storecount.get(getThreadId()) != null ? storecount.get(getThreadId()) : "0") + "\n");
+                    + "Field load:    " + (fieldloadcount.get(getThreadId()) != null ? fieldloadcount.get(getThreadId()) : "0") + "\n"
+                    + "Field store:  " + (fieldstorecount.get(getThreadId()) != null ? fieldstorecount.get(getThreadId()) : "0") + "\n");
+
+            System.out.println("LOAD_STORE: " + "\n"
+                    + "Field load:    " + (fieldloadcount.get(getThreadId()) != null ? fieldloadcount.get(getThreadId()) : "0") + "\n"
+                    + "Field store:  " + (fieldstorecount.get(getThreadId()) != null ? fieldstorecount.get(getThreadId()) : "0") + "\n");
+
+            //reset hashmaps for next request
             fieldloadcount.put(getThreadId(), new Long(0));
             fieldstorecount.put(getThreadId(), new Long(0));
             log.close();
@@ -154,7 +157,6 @@ public class MyTool {
 
     public static synchronized void LSFieldCount(int type) {
         if (type == 0) {
-            //fieldloadcount++;
             if(fieldloadcount.get(getThreadId()) != null) {
                 fieldloadcount.put(getThreadId(), fieldloadcount.get(getThreadId()) + 1);
             } else {
@@ -162,7 +164,6 @@ public class MyTool {
             }
         }
         else {
-            //fieldstorecount++;
             if(fieldstorecount.get(getThreadId()) != null) {
                 fieldstorecount.put(getThreadId(), fieldstorecount.get(getThreadId()) + 1);
             } else {
@@ -171,24 +172,6 @@ public class MyTool {
         }
     }
 
-    public static synchronized void LSCount(int type) {
-        if (type == 0) {
-            //loadcount++;
-            if(loadcount.get(getThreadId()) != null) {
-                loadcount.put(getThreadId(), loadcount.get(getThreadId()) + 1);
-            } else {
-                loadcount.put(getThreadId(), new Long(1));
-            }
-        }
-        else {
-            //storecount++;
-            if(storecount.get(getThreadId()) != null) {
-                storecount.put(getThreadId(), storecount.get(getThreadId()) + 1);
-            } else {
-                storecount.put(getThreadId(), new Long(1));
-            }
-        }
-    }
     /*
      *  Auxiliar methods
      */

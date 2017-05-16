@@ -155,7 +155,7 @@ public class RayTracer {
 			executor.awaitTermination(5, TimeUnit.MINUTES);
 		} else {
 			for(int r = 0;r < wrows; r++) {
-				if(r % 5 == 0) Log.info((wrows - r) + " rows left to trace.");
+				if(r % 50 == 0) Log.info((wrows - r) + " rows left to trace.");
 				for(int c = 0;c < wcols; c++) {
 					image.setRGB(c, r, getPixelColor(c+coff, r+roff).getRGB());
 				}
