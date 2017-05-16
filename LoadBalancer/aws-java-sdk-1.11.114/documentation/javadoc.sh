@@ -1,0 +1,1 @@
+/jdk/jdk8/jre/../bin/javadoc -J-Xmx2048m -J-Xms128m @options @packages
