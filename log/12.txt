@@ -257,3 +257,21 @@ Average number of instructions per basic block: 174.0
 raytracer/Main - LOAD_STORE: 
 Field load:    176056425
 Field store:  43055624
+###############################
+f=test04.txt&sc=400&sr=300&wc=400&wr=300&coff=0&roff=0
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      119928
+Number of instructions:      20867472
+Average number of instructions per basic block: 174.0
+raytracer/Main - LOAD_STORE: 
+Field load:    176056425
+Field store:  43055624
+###############################
+f=test04.txt&sc=400&sr=300&wc=400&wr=300&coff=0&roff=0
+raytracer/Main - ICOUNT: 
+Number of basic blocks:      119928
+Number of instructions:      20867472
+Average number of instructions per basic block: 174.0
+raytracer/Main - LOAD_STORE: 
+Field load:    176056425
+Field store:  43055624
