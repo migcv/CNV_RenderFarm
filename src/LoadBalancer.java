@@ -1,15 +1,22 @@
-
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.Set;
 
 import com.amazonaws.AmazonClientException;
@@ -27,8 +34,6 @@ import com.amazonaws.services.elasticloadbalancing.AmazonElasticLoadBalancingCli
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-
-import raytracer.Main;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
@@ -49,6 +54,7 @@ public class LoadBalancer {
 
 	static AmazonEC2 ec2;
 	static AmazonElasticLoadBalancingClient elb;
+	static ArrayList<Instance> createdInstances = new ArrayList<>();
 
 	/**
 	 * The only information needed to create a client are security credentials
@@ -96,7 +102,7 @@ public class LoadBalancer {
 	public static void setupServer() {
 		HttpServer server;
 		try {
-			server = HttpServer.create(new InetSocketAddress(80), 0);
+			server = HttpServer.create(new InetSocketAddress(8000), 0);
 			server.createContext("/r.html", new LoadBalancer.MyHandler());
 			server.setExecutor(null); // creates a default executor
 			server.start();
@@ -141,7 +147,7 @@ public class LoadBalancer {
 				RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
 
 				/* TODO: configure to use your AMI, key and security group */
-				runInstancesRequest.withImageId("ami-bf73e4df").withInstanceType("t2.micro").withMinCount(1)
+				runInstancesRequest.withImageId("ami-b82d4bd8").withInstanceType("t2.micro").withMinCount(1)
 						.withMaxCount(1).withKeyName("CNV-lab-AWS").withSecurityGroups("CNV-ssh+http");
 				RunInstancesResult runInstancesResult = ec2.runInstances(runInstancesRequest);
 				String newInstanceId = runInstancesResult.getReservation().getInstances().get(0).getInstanceId();
@@ -153,22 +159,79 @@ public class LoadBalancer {
 					instances.addAll(reservation.getInstances());
 				}
 
+				System.out.println("Started instance with id > " + instances.size());
+
 				System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
 				System.out.println("Waiting 1 minute. See your instance in the AWS console...");
-				Thread.sleep(60000);
+				// Thread.sleep(60000);
 				// System.out.println("Terminating the instance.");
 				// TerminateInstancesRequest termInstanceReq = new
 				// TerminateInstancesRequest();
 				// termInstanceReq.withInstanceIds(newInstanceId);
 				// ec2.terminateInstances(termInstanceReq);
 
+				Long time = System.currentTimeMillis();
+
 				String dns = "";
-				for (Instance ins : instances) {
-					dns = ins.getPrivateDnsName();
+				String instanceID = "";
+				for (Reservation reservation : reservations) {
+					for (Instance instance : reservation.getInstances()) {
+						if (instance.getInstanceId().equals(newInstanceId)) {
+							while (instance.getPublicDnsName().isEmpty()) {
+							}
+							System.out
+									.println("DNS: " + instance.getPublicDnsName() + " ID:" + instance.getInstanceId());
+							dns = instance.getPublicDnsName();
+							instanceID = instance.getInstanceId();
+							createdInstances.add(instance);
+							break;
+						}
+					}
 				}
 
-				URL url = new URL("http://" + dns + "/" + t.getRequestURI().getQuery());
+				healthCheck(dns, instanceID);
+
+				System.out.println("CHECK Health ");
+
+				new MyThread();
+
+				System.out.println("QUERY: " + t.getRequestURI().getQuery());
+
+				URL url = new URL("http://" + dns + ":8000/r.html?" + t.getRequestURI().getQuery());
+				// URL url = new URL("http://" + dns + ":8000/r.html?");
+				System.out.println("URL");
 				URLConnection connection = url.openConnection();
+				System.out.println("URLConnection");
+
+				/*
+				 * Scanner s = new Scanner(connection.getInputStream());
+				 * System.out.println("Scanner"); while (s.hasNext()) { response
+				 * += s.next(); } System.out.println("Response: " + response);
+				 * s.close();
+				 */
+
+				InputStream is = connection.getInputStream();
+
+				String saveFilePath = Thread.currentThread().getId() + OUTPUT_FILE_NAME;
+
+				// opens an output stream to save into file
+				FileOutputStream outputStream = new FileOutputStream(saveFilePath);
+
+				int bytesRead = -1;
+				byte[] buffer = null;
+				while ((bytesRead = is.read(buffer)) != -1) {
+					outputStream.write(buffer, 0, bytesRead);
+				}
+
+				outputStream.close();
+				is.close();
+
+				System.out.println("File downloaded");
+
+				t.sendResponseHeaders(200, response.length());
+				OutputStream os = t.getResponseBody();
+				os.write(response.getBytes());
+				os.close();
 
 			} catch (Exception e) {
 				try {
@@ -186,6 +249,104 @@ public class LoadBalancer {
 		}
 	}
 
+	static boolean healthCheck(String dns, String instanceID) {
+		String response = new String();
+		int healthy = 0;
+		int unhealthy = 0;
+		URLConnection connection;
+		// URL url = new URL("http://" + dns + ":8000/r.html?" +
+		// t.getRequestURI().getQuery());
+		while (healthy < 3) {
+			try {
+				URL url = new URL("http://" + dns + ":8000/r.html?");
+				System.out.println("URL");
+				connection = url.openConnection();
+				System.out.println("URLConnection");
+				Scanner s = new Scanner(connection.getInputStream());
+				System.out.println("Scanner");
+				while (s.hasNext()) {
+					response += s.next();
+					System.out.println("Response: " + response);
+				}
+
+				s.close();
+
+				if (response.equals("OK")) {
+					System.out.println("HEALTY");
+					unhealthy = 0;
+					healthy += 1;
+					response = "";
+				}
+
+			} catch (IOException e) {
+				healthy = 0;
+				unhealthy += 1;
+				System.out.println("UNHEALTY");
+				if (unhealthy > 2) {
+					System.out.println("Terminating the instance.");
+					TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
+					termInstanceReq.withInstanceIds(instanceID);
+					ec2.terminateInstances(termInstanceReq);
+					return false;
+				}
+				// e.printStackTrace();
+			}
+		}
+		return true;
+	}
+
+	static void threadToHealthCheck(String newInstanceId) throws Exception {
+
+		DescribeInstancesResult describeInstancesRequest = ec2.describeInstances();
+		List<Reservation> reservations = describeInstancesRequest.getReservations();
+		Set<Instance> instances = new HashSet<Instance>();
+
+		for (Reservation reservation : reservations) {
+			instances.addAll(reservation.getInstances());
+		}
+
+		for (Reservation reservation : reservations) {
+			for (Instance instance : reservation.getInstances()) {
+				if (instance.getInstanceId().equals(newInstanceId)) {
+					String response = new String();
+					// URL url = new URL("http://" + dns + ":8000/r.html?" +
+					// t.getRequestURI().getQuery());
+					URL url = new URL("http://" + instance.getPublicDnsName() + ":8000/r.html?");
+					System.out.println("URL");
+					URLConnection connection = url.openConnection();
+					System.out.println("URLConnection");
+					Scanner s = new Scanner(connection.getInputStream());
+					System.out.println("Scanner");
+					while (s.hasNext()) {
+						response += s.next();
+						System.out.println("Response: " + response);
+					}
+					s.close();
+					break;
+				}
+			}
+		}
+
+	}
+
+	static class MyThread extends Thread {
+
+		@Override
+		public void run() {
+			try {
+				while (true) {
+					for (int i = 0; i < createdInstances.size(); i++) {
+						threadToHealthCheck(createdInstances.get(i).getInstanceId());
+					}
+					sleep(30000);
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+
+		}
+	}
+
 	static Map<String, String> queryToMap(String query) {
 		Map<String, String> result = new HashMap<String, String>();
 		for (String param : query.split("&")) {
@@ -200,4 +361,5 @@ public class LoadBalancer {
 		}
 		return result;
 	}
+
 }
