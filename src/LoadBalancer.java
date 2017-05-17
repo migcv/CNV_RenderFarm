@@ -1,7 +1,15 @@
 
-
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.file.Files;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import com.amazonaws.AmazonClientException;
@@ -16,6 +24,12 @@ import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.ec2.model.RunInstancesRequest;
 import com.amazonaws.services.elasticloadbalancing.AmazonElasticLoadBalancingClient;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
+
+import raytracer.Main;
+
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 import com.amazonaws.services.ec2.model.RunInstancesResult;
@@ -75,57 +89,115 @@ public class LoadBalancer {
 		System.out.println("===========================================");
 
 		init();
+		setupServer();
 
+	}
+
+	public static void setupServer() {
+		HttpServer server;
 		try {
-			DescribeAvailabilityZonesResult availabilityZonesResult = ec2.describeAvailabilityZones();
-			System.out.println("You have access to " + availabilityZonesResult.getAvailabilityZones().size()
-					+ " Availability Zones.");
-			/*
-			 * using AWS Ireland. TODO: Pick the zone where you have your AMI,
-			 * sec group and keys
-			 */
-			DescribeInstancesResult describeInstancesRequest = ec2.describeInstances();
-			List<Reservation> reservations = describeInstancesRequest.getReservations();
-			Set<Instance> instances = new HashSet<Instance>();
-
-			for (Reservation reservation : reservations) {
-				instances.addAll(reservation.getInstances());
-			}
-
-			System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
-			System.out.println("Starting a new instance.");
-			RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
-
-			/* TODO: configure to use your AMI, key and security group */
-			runInstancesRequest.withImageId("ami-bf73e4df")
-							   .withInstanceType("t2.micro")
-							   .withMinCount(1)
-							   .withMaxCount(1)
-							   .withKeyName("CNV-lab-AWS")
-							   .withSecurityGroups("CNV-ssh+http");
-			RunInstancesResult runInstancesResult = ec2.runInstances(runInstancesRequest);
-			String newInstanceId = runInstancesResult.getReservation().getInstances().get(0).getInstanceId();
-			describeInstancesRequest = ec2.describeInstances();
-			reservations = describeInstancesRequest.getReservations();
-			instances = new HashSet<Instance>();
-
-			for (Reservation reservation : reservations) {
-				instances.addAll(reservation.getInstances());
-			}
-
-			System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
-			System.out.println("Waiting 1 minute. See your instance in the AWS console...");
-			Thread.sleep(60000);
-			System.out.println("Terminating the instance.");
-			TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
-			termInstanceReq.withInstanceIds(newInstanceId);
-			ec2.terminateInstances(termInstanceReq);
-
-		} catch (AmazonServiceException ase) {
-			System.out.println("Caught Exception: " + ase.getMessage());
-			System.out.println("Reponse Status Code: " + ase.getStatusCode());
-			System.out.println("Error Code: " + ase.getErrorCode());
-			System.out.println("Request ID: " + ase.getRequestId());
+			server = HttpServer.create(new InetSocketAddress(80), 0);
+			server.createContext("/r.html", new LoadBalancer.MyHandler());
+			server.setExecutor(null); // creates a default executor
+			server.start();
+			System.out.println("Load Balancer ready");
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
+	}
+
+	static class MyHandler implements HttpHandler {
+
+		public static String OUTPUT_FILE_NAME = "output.bmp";
+
+		@Override
+		public void handle(HttpExchange t) {
+
+			String response = new String();
+
+			try {
+				Map<String, String> params = queryToMap(t.getRequestURI().getQuery());
+				System.out.println("Connection from: " + t.getRemoteAddress());
+
+				if (params.get("f") == null) {
+					response = "OK";
+					t.sendResponseHeaders(200, response.length());
+					OutputStream os = t.getResponseBody();
+					os.write(response.getBytes());
+					os.close();
+					return;
+				}
+
+				DescribeInstancesResult describeInstancesRequest = ec2.describeInstances();
+				List<Reservation> reservations = describeInstancesRequest.getReservations();
+				Set<Instance> instances = new HashSet<Instance>();
+
+				for (Reservation reservation : reservations) {
+					instances.addAll(reservation.getInstances());
+				}
+
+				System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
+				System.out.println("Starting a new instance.");
+				RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
+
+				/* TODO: configure to use your AMI, key and security group */
+				runInstancesRequest.withImageId("ami-bf73e4df").withInstanceType("t2.micro").withMinCount(1)
+						.withMaxCount(1).withKeyName("CNV-lab-AWS").withSecurityGroups("CNV-ssh+http");
+				RunInstancesResult runInstancesResult = ec2.runInstances(runInstancesRequest);
+				String newInstanceId = runInstancesResult.getReservation().getInstances().get(0).getInstanceId();
+				describeInstancesRequest = ec2.describeInstances();
+				reservations = describeInstancesRequest.getReservations();
+				instances = new HashSet<Instance>();
+
+				for (Reservation reservation : reservations) {
+					instances.addAll(reservation.getInstances());
+				}
+
+				System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
+				System.out.println("Waiting 1 minute. See your instance in the AWS console...");
+				Thread.sleep(60000);
+				// System.out.println("Terminating the instance.");
+				// TerminateInstancesRequest termInstanceReq = new
+				// TerminateInstancesRequest();
+				// termInstanceReq.withInstanceIds(newInstanceId);
+				// ec2.terminateInstances(termInstanceReq);
+
+				String dns = "";
+				for (Instance ins : instances) {
+					dns = ins.getPrivateDnsName();
+				}
+
+				URL url = new URL("http://" + dns + "/" + t.getRequestURI().getQuery());
+				URLConnection connection = url.openConnection();
+
+			} catch (Exception e) {
+				try {
+					response = "ERROR: " + e.getMessage();
+					System.out.println("ERROR: " + e.getMessage());
+					t.sendResponseHeaders(200, response.length());
+					OutputStream os = t.getResponseBody();
+					os.write(response.getBytes());
+					os.close();
+					e.printStackTrace();
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
+			}
+		}
+	}
+
+	static Map<String, String> queryToMap(String query) {
+		Map<String, String> result = new HashMap<String, String>();
+		for (String param : query.split("&")) {
+
+			String pair[] = param.split("=");
+			if (pair.length > 1) {
+				result.put(pair[0], pair[1]);
+				System.out.println(pair[0] + " : " + pair[1]);
+			} else {
+				result.put(pair[0], "");
+			}
+		}
+		return result;
 	}
 }
