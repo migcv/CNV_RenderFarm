@@ -163,7 +163,7 @@ public class LoadBalancer {
 
 				System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
 				System.out.println("Waiting 2 minute. See your instance in the AWS console...");
-				Thread.sleep(120000);
+				Thread.sleep(150000);
 				// System.out.println("Terminating the instance.");
 				// TerminateInstancesRequest termInstanceReq = new
 				// TerminateInstancesRequest();
