@@ -148,7 +148,7 @@ public class LoadBalancer {
 
 				/* TODO: configure to use your AMI, key and security group */
 				runInstancesRequest.withImageId("ami-b82d4bd8").withInstanceType("t2.micro").withMinCount(1)
-						.withMaxCount(1).withKeyName("CNV-lab-AWS").withSecurityGroups("CNV-ssh+http");
+						.withMaxCount(1).withKeyName("CNV-lab-AWS").withSecurityGroups("launch-wizard-1");
 				RunInstancesResult runInstancesResult = ec2.runInstances(runInstancesRequest);
 				String newInstanceId = runInstancesResult.getReservation().getInstances().get(0).getInstanceId();
 				describeInstancesRequest = ec2.describeInstances();
@@ -162,8 +162,8 @@ public class LoadBalancer {
 				System.out.println("Started instance with id > " + instances.size());
 
 				System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
-				System.out.println("Waiting 1 minute. See your instance in the AWS console...");
-				// Thread.sleep(60000);
+				System.out.println("Waiting 2 minute. See your instance in the AWS console...");
+				Thread.sleep(120000);
 				// System.out.println("Terminating the instance.");
 				// TerminateInstancesRequest termInstanceReq = new
 				// TerminateInstancesRequest();
@@ -177,10 +177,8 @@ public class LoadBalancer {
 				for (Reservation reservation : reservations) {
 					for (Instance instance : reservation.getInstances()) {
 						if (instance.getInstanceId().equals(newInstanceId)) {
-							while (instance.getPublicDnsName().isEmpty()) {
-							}
-							System.out
-									.println("DNS: " + instance.getPublicDnsName() + " ID:" + instance.getInstanceId());
+							while (instance.getPublicDnsName().isEmpty()) {}
+							System.out.println("DNS: " + instance.getPublicDnsName() + " ID:" + instance.getInstanceId());
 							dns = instance.getPublicDnsName();
 							instanceID = instance.getInstanceId();
 							createdInstances.add(instance);
@@ -189,7 +187,9 @@ public class LoadBalancer {
 					}
 				}
 
-				healthCheck(dns, instanceID);
+				if(!healthCheck(dns, instanceID)){
+					return;
+				}
 
 				System.out.println("CHECK Health ");
 
@@ -218,7 +218,7 @@ public class LoadBalancer {
 				FileOutputStream outputStream = new FileOutputStream(saveFilePath);
 
 				int bytesRead = -1;
-				byte[] buffer = null;
+				byte[] buffer = new byte[2048];
 				while ((bytesRead = is.read(buffer)) != -1) {
 					outputStream.write(buffer, 0, bytesRead);
 				}
@@ -228,9 +228,15 @@ public class LoadBalancer {
 
 				System.out.println("File downloaded");
 
-				t.sendResponseHeaders(200, response.length());
+				File image = new File(saveFilePath);
+
+				// System.out.println("HTTP_Response: " + response);
+
+				t.sendResponseHeaders(200, image.length());
+
 				OutputStream os = t.getResponseBody();
-				os.write(response.getBytes());
+				Files.copy(image.toPath(), os);
+				// os.write(image.getBytes());
 				os.close();
 
 			} catch (Exception e) {
@@ -254,21 +260,18 @@ public class LoadBalancer {
 		int healthy = 0;
 		int unhealthy = 0;
 		URLConnection connection;
+		URL url;
 		// URL url = new URL("http://" + dns + ":8000/r.html?" +
 		// t.getRequestURI().getQuery());
 		while (healthy < 3) {
 			try {
-				URL url = new URL("http://" + dns + ":8000/r.html?");
-				System.out.println("URL");
+				url = new URL("http://" + dns + ":8000/r.html?");
 				connection = url.openConnection();
-				System.out.println("URLConnection");
 				Scanner s = new Scanner(connection.getInputStream());
-				System.out.println("Scanner");
 				while (s.hasNext()) {
 					response += s.next();
 					System.out.println("Response: " + response);
 				}
-
 				s.close();
 
 				if (response.equals("OK")) {
@@ -277,10 +280,13 @@ public class LoadBalancer {
 					healthy += 1;
 					response = "";
 				}
+				System.out.println("ACABEI");
 
 			} catch (IOException e) {
 				healthy = 0;
 				unhealthy += 1;
+				url = null;
+				connection = null;
 				System.out.println("UNHEALTY");
 				if (unhealthy > 2) {
 					System.out.println("Terminating the instance.");
