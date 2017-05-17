@@ -63,7 +63,6 @@ public class WebServer {
 
 				System.out.println(Thread.currentThread().getId() + " - Received Resquest: <"
 						+ t.getRequestURI().getQuery() + ">");
-				writeRequest(t.getRequestURI().getQuery());
 
 				String[] args = { params.get("f"), OUTPUT_FILE_NAME, params.get("sc"), params.get("sr"),
 						params.get("wc"), params.get("wr"), params.get("coff"), params.get("roff") };
@@ -109,23 +108,6 @@ public class WebServer {
 			}
 		}
 		return result;
-	}
-
-	static synchronized void writeRequest(String query) {
-		try {
-			File file = new File("/home/ec2-user/CNV_RenderFarm/log/" + Thread.currentThread().getId() + ".txt");
-			FileWriter log = new FileWriter(file, true);
-			// FileWriter log = new
-			// FileWriter("/home/ec2-user/CNV_RenderFarm/log/" +
-			// Thread.currentThread().getId() +".txt", true);
-			// DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd
-			// HH:mm:ss");
-			// Calendar cal = Calendar.getInstance();
-			log.write("###############################\n" + query + "\n");
-			log.close();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
 	}
 
 }

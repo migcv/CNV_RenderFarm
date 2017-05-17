@@ -1,5 +1,3 @@
-
-
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -51,7 +49,16 @@ public class MyTool {
     
     private static AmazonDynamoDBClient dynamoDB;
     
-    private static String tableName = "mss";
+    private static final String TABLE_NAME = "mss";
+    
+    private static final long BB_LOW = 120000; 			// 120 000
+    private static final long BB_HIGH = 2000000;		// 2 000 000
+    private static final long INS_LOW = 21000000;		// 21 000 000
+    private static final long INS_HIGH = 335000000;		// 335 000 000
+    private static final long LOAD_LOW = 180000000;		// 180 000 000
+    private static final long LOAD_HIGH = 1355000000;	// 1 355 000 000
+    private static final long STORE_LOW = 45000000; 	// 45 000 000
+    private static final long STORE_HIGH = 330000000;	// 330 000 000
 
     public static void main(String argv[]) {
         File file_in = new File(argv[0]);
@@ -129,10 +136,6 @@ public class MyTool {
                 instr_per_bb = (float) i_count.get(getThreadId()) / (float) b_count.get(getThreadId());
             }
             log.write("Average number of instructions per basic block: " + instr_per_bb + "\n");
-            System.out.println("ICOUNT: " + "\n"
-                    + "Number of basic blocks:      " + (b_count.get(getThreadId()) != null ? b_count.get(getThreadId()) : "0") + "\n"
-                    + "Number of instructions:      " + (i_count.get(getThreadId()) != null ? i_count.get(getThreadId()) : "0") + "\n"
-                    + "Average number of instructions per basic block: " + instr_per_bb + "\n");
             log.close();
 
             //reset hashmaps for next request
@@ -165,11 +168,6 @@ public class MyTool {
             log.write(foo + " - LOAD_STORE: " + "\n"
                     + "Field load:    " + (fieldloadcount.get(getThreadId()) != null ? fieldloadcount.get(getThreadId()) : "0") + "\n"
                     + "Field store:  " + (fieldstorecount.get(getThreadId()) != null ? fieldstorecount.get(getThreadId()) : "0") + "\n");
-
-            System.out.println("LOAD_STORE: " + "\n"
-                    + "Field load:    " + (fieldloadcount.get(getThreadId()) != null ? fieldloadcount.get(getThreadId()) : "0") + "\n"
-                    + "Field store:  " + (fieldstorecount.get(getThreadId()) != null ? fieldstorecount.get(getThreadId()) : "0") + "\n");
-
             //reset hashmaps for next request
             fieldloadcount.put(getThreadId(), new Long(0));
             fieldstorecount.put(getThreadId(), new Long(0));
@@ -204,9 +202,16 @@ public class MyTool {
     	if(request.get(getThreadId()) == null) {
     		System.out.println("NULL");
     	}
-    	System.out.println("THREAD > " + getThreadId() + " | Writting on " + tableName);
-    	Map<String, AttributeValue> item = newItem(request.get(getThreadId()).get("f"), request.get(getThreadId()).get("sc"), request.get(getThreadId()).get("sr"), request.get(getThreadId()).get("wc"), request.get(getThreadId()).get("wr"), request.get(getThreadId()).get("coff"), request.get(getThreadId()).get("roff"), 2);
-        PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
+    	System.out.println("BB:	" + (b_count.get(getThreadId()) != null ? b_count.get(getThreadId()) : "0") + "\n"
+    					 + "INSTRUC:  " + (i_count.get(getThreadId()) != null ? i_count.get(getThreadId()) : "0") + "\n"
+                		 + "F LOAD:   " + (fieldloadcount.get(getThreadId()) != null ? fieldloadcount.get(getThreadId()) : "0") + "\n"
+                		 + "F STORE:  " + (fieldstorecount.get(getThreadId()) != null ? fieldstorecount.get(getThreadId()) : "0"));
+    	
+    	int rank = calcRank();
+    	
+    	System.out.println("THREAD > " + getThreadId() + " | Writting on " + TABLE_NAME);
+    	Map<String, AttributeValue> item = newItem(request.get(getThreadId()).get("f"), request.get(getThreadId()).get("sc"), request.get(getThreadId()).get("sr"), request.get(getThreadId()).get("wc"), request.get(getThreadId()).get("wr"), request.get(getThreadId()).get("coff"), request.get(getThreadId()).get("roff"), rank);
+        PutItemRequest putItemRequest = new PutItemRequest(TABLE_NAME, item);
         PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
         
 
@@ -262,6 +267,43 @@ public class MyTool {
         item.put("rank", new AttributeValue().withN(Integer.toString(rank)));
 
         return item;
+    }
+    
+    private static int calcRank() {
+    	int rank = 0;
+    	// RANK CALC FOR BASIC BLOCKS
+    	if(0 < b_count.get(getThreadId()) && b_count.get(getThreadId()) < BB_LOW) {
+    		rank += 1;
+    	} else if(BB_LOW <= b_count.get(getThreadId()) && b_count.get(getThreadId()) < BB_HIGH) {
+    		rank += 2;
+    	} else {
+    		rank += 3;
+    	}
+    	// RANK CALC FOR INSTRUCTIONS
+    	if(0 < i_count.get(getThreadId()) && i_count.get(getThreadId()) < INS_LOW) {
+    		rank += 1;
+    	} else if(INS_LOW <= i_count.get(getThreadId()) && i_count.get(getThreadId()) < INS_HIGH) {
+    		rank += 2;
+    	} else {
+    		rank += 3;
+    	}
+    	// RANK CALC FOR FIELD LOADS
+    	if(0 < fieldloadcount.get(getThreadId()) && fieldloadcount.get(getThreadId()) < LOAD_LOW) {
+    		rank += 2;
+    	} else if(LOAD_LOW <= fieldloadcount.get(getThreadId()) && fieldloadcount.get(getThreadId()) < LOAD_HIGH) {
+    		rank += 3;
+    	} else {
+    		rank += 4;
+    	}
+    	// RANK CALC FOR FIELD STORES
+    	if(0 < fieldstorecount.get(getThreadId()) && fieldstorecount.get(getThreadId()) < STORE_LOW) {
+    		rank += 2;
+    	} else if(STORE_LOW <= fieldstorecount.get(getThreadId()) && fieldstorecount.get(getThreadId()) < STORE_HIGH) {
+    		rank += 3;
+    	} else {
+    		rank += 4;
+    	}
+    	return rank;
     }
 }
 
