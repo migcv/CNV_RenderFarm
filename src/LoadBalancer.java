@@ -18,11 +18,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.regions.Region;
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
+import com.amazonaws.services.dynamodbv2.model.Condition;
+import com.amazonaws.services.dynamodbv2.model.ScanRequest;
+import com.amazonaws.services.dynamodbv2.model.ScanResult;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.DescribeAvailabilityZonesResult;
@@ -54,7 +63,18 @@ public class LoadBalancer {
 
 	static AmazonEC2 ec2;
 	static AmazonElasticLoadBalancingClient elb;
-	static ArrayList<Instance> createdInstances = new ArrayList<>();
+	
+	static ConcurrentHashMap<String,Instance> currentInstances = new ConcurrentHashMap<>();
+	static ConcurrentHashMap<String,Integer> currentInstancesRanks = new ConcurrentHashMap<>();
+	static ConcurrentHashMap<String, ConcurrentHashMap<String,Request>> currentInstancesResquests = new ConcurrentHashMap<>();
+	
+	static AmazonDynamoDBClient dynamoDB;
+	
+	static String OUTPUT_FILE_NAME = "output.bmp";
+	
+	static final String TABLE_NAME = "mss";
+	
+	static final int INSTANCE_MAX_RANK = 20;
 
 	/**
 	 * The only information needed to create a client are security credentials
@@ -86,6 +106,11 @@ public class LoadBalancer {
 				.withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
 
 		elb = new AmazonElasticLoadBalancingClient(credentials);
+		
+        dynamoDB = new AmazonDynamoDBClient(credentials);
+        Region usWest2 = Region.getRegion(Regions.US_WEST_2);
+        dynamoDB.setRegion(usWest2);
+		
 	}
 
 	public static void main(String[] args) throws Exception {
@@ -96,6 +121,8 @@ public class LoadBalancer {
 
 		init();
 		setupServer();
+		
+		new HealthCheckThread();
 
 	}
 
@@ -114,18 +141,15 @@ public class LoadBalancer {
 
 	static class MyHandler implements HttpHandler {
 
-		public static String OUTPUT_FILE_NAME = "output.bmp";
-
 		@Override
 		public void handle(HttpExchange t) {
 
 			String response = new String();
 
 			try {
-				Map<String, String> params = queryToMap(t.getRequestURI().getQuery());
 				System.out.println("Connection from: " + t.getRemoteAddress());
 
-				if (params.get("f") == null) {
+				if (t.getRequestURI().getQuery().isEmpty()) {
 					response = "OK";
 					t.sendResponseHeaders(200, response.length());
 					OutputStream os = t.getResponseBody();
@@ -133,111 +157,22 @@ public class LoadBalancer {
 					os.close();
 					return;
 				}
-
-				DescribeInstancesResult describeInstancesRequest = ec2.describeInstances();
-				List<Reservation> reservations = describeInstancesRequest.getReservations();
-				Set<Instance> instances = new HashSet<Instance>();
-
-				for (Reservation reservation : reservations) {
-					instances.addAll(reservation.getInstances());
-				}
-
-				System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
-				System.out.println("Starting a new instance.");
-				RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
-
-				/* TODO: configure to use your AMI, key and security group */
-				runInstancesRequest.withImageId("ami-b82d4bd8").withInstanceType("t2.micro").withMinCount(1)
-						.withMaxCount(1).withKeyName("CNV-lab-AWS").withSecurityGroups("launch-wizard-1");
-				RunInstancesResult runInstancesResult = ec2.runInstances(runInstancesRequest);
-				String newInstanceId = runInstancesResult.getReservation().getInstances().get(0).getInstanceId();
-				describeInstancesRequest = ec2.describeInstances();
-				reservations = describeInstancesRequest.getReservations();
-				instances = new HashSet<Instance>();
-
-				for (Reservation reservation : reservations) {
-					instances.addAll(reservation.getInstances());
-				}
-
-				System.out.println("Started instance with id > " + instances.size());
-
-				System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
-				System.out.println("Waiting 2 minute. See your instance in the AWS console...");
-				Thread.sleep(150000);
-				// System.out.println("Terminating the instance.");
-				// TerminateInstancesRequest termInstanceReq = new
-				// TerminateInstancesRequest();
-				// termInstanceReq.withInstanceIds(newInstanceId);
-				// ec2.terminateInstances(termInstanceReq);
-
-				Long time = System.currentTimeMillis();
-
-				String dns = "";
-				String instanceID = "";
-				for (Reservation reservation : reservations) {
-					for (Instance instance : reservation.getInstances()) {
-						if (instance.getInstanceId().equals(newInstanceId)) {
-							while (instance.getPublicDnsName().isEmpty()) {}
-							System.out.println("DNS: " + instance.getPublicDnsName() + " ID:" + instance.getInstanceId());
-							dns = instance.getPublicDnsName();
-							instanceID = instance.getInstanceId();
-							createdInstances.add(instance);
-							break;
-						}
+				
+				Request request = setResquest(t.getRequestURI().getQuery());
+				int rank = getRequestRank(request);
+				
+				if(rank == -1) {
+					// NEW REQUEST
+				} else {
+					String instanceID = getFreeInstance(request.getRank());
+					if(instanceID != null) {
+						currentInstancesRanks.put(instanceID, currentInstancesRanks.get(instanceID) + request.getRank());
+						currentInstancesResquests.get(instanceID).put(request.getId(), request);
+						redirectRequest(t, currentInstances.get(instanceID).getPublicDnsName());
+						currentInstancesRanks.put(instanceID, currentInstancesRanks.get(instanceID) - request.getRank());
+						currentInstancesResquests.get(instanceID).remove(request.getId());
 					}
 				}
-
-				if(!healthCheck(dns, instanceID)){
-					return;
-				}
-
-				System.out.println("CHECK Health ");
-
-				new MyThread();
-
-				System.out.println("QUERY: " + t.getRequestURI().getQuery());
-
-				URL url = new URL("http://" + dns + ":8000/r.html?" + t.getRequestURI().getQuery());
-				// URL url = new URL("http://" + dns + ":8000/r.html?");
-				System.out.println("URL");
-				URLConnection connection = url.openConnection();
-				System.out.println("URLConnection");
-
-				/*
-				 * Scanner s = new Scanner(connection.getInputStream());
-				 * System.out.println("Scanner"); while (s.hasNext()) { response
-				 * += s.next(); } System.out.println("Response: " + response);
-				 * s.close();
-				 */
-
-				InputStream is = connection.getInputStream();
-
-				String saveFilePath = Thread.currentThread().getId() + OUTPUT_FILE_NAME;
-
-				// opens an output stream to save into file
-				FileOutputStream outputStream = new FileOutputStream(saveFilePath);
-
-				int bytesRead = -1;
-				byte[] buffer = new byte[2048];
-				while ((bytesRead = is.read(buffer)) != -1) {
-					outputStream.write(buffer, 0, bytesRead);
-				}
-
-				outputStream.close();
-				is.close();
-
-				System.out.println("File downloaded");
-
-				File image = new File(saveFilePath);
-
-				// System.out.println("HTTP_Response: " + response);
-
-				t.sendResponseHeaders(200, image.length());
-
-				OutputStream os = t.getResponseBody();
-				Files.copy(image.toPath(), os);
-				// os.write(image.getBytes());
-				os.close();
 
 			} catch (Exception e) {
 				try {
@@ -254,6 +189,196 @@ public class LoadBalancer {
 			}
 		}
 	}
+	
+	static void startNewInstance() {
+		
+		Thread thread = new Thread() {
+			
+			public void run() {
+				
+				//Instance instance AutoScaler.startInstance();
+				Instance instance = null;
+				
+				currentInstances.put(instance.getInstanceId(), instance);
+				currentInstancesRanks.put(instance.getInstanceId(), 0);
+				currentInstancesResquests.put(instance.getInstanceId(), new ConcurrentHashMap<String, Request>());
+				
+			}
+		};
+		thread.start();
+		
+	}
+	
+	static void removeInstance(final String instaceID) {
+		
+		Thread thread = new Thread() {
+			
+			public void run() {
+				
+				currentInstances.remove(instaceID);
+				currentInstancesRanks.remove(instaceID);
+				currentInstancesResquests.remove(instaceID);
+				
+				//Instance instance AutoScaler.startInstance();
+				
+			}
+		};
+		thread.start();
+		
+	}
+	
+	public static int getRequestRank(Request request) {
+		
+		HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
+		Condition condition = new Condition()
+	            .withComparisonOperator(ComparisonOperator.EQ.toString())
+	            .withAttributeValueList(new AttributeValue().withN(request.getFilename()));
+	    scanFilter.put("filename", condition);
+        condition = new Condition()
+                .withComparisonOperator(ComparisonOperator.EQ.toString())
+                .withAttributeValueList(new AttributeValue().withN(request.getScols()));
+        scanFilter.put("scols", condition);
+        condition = new Condition()
+            .withComparisonOperator(ComparisonOperator.EQ.toString())
+            .withAttributeValueList(new AttributeValue().withN(request.getSrows()));
+        scanFilter.put("srows", condition);
+        condition = new Condition()
+                .withComparisonOperator(ComparisonOperator.EQ.toString())
+                .withAttributeValueList(new AttributeValue().withN(request.getWcols()));
+        scanFilter.put("wcols", condition);
+        condition = new Condition()
+                .withComparisonOperator(ComparisonOperator.EQ.toString())
+                .withAttributeValueList(new AttributeValue().withN(request.getWrows()));
+        scanFilter.put("wrows", condition);
+        condition = new Condition()
+                .withComparisonOperator(ComparisonOperator.EQ.toString())
+                .withAttributeValueList(new AttributeValue().withN(request.getCoff()));
+        scanFilter.put("coff", condition);
+        condition = new Condition()
+                .withComparisonOperator(ComparisonOperator.EQ.toString())
+                .withAttributeValueList(new AttributeValue().withN(request.getRoff()));
+        scanFilter.put("roff", condition);
+        ScanRequest scanRequest = new ScanRequest(TABLE_NAME).withScanFilter(scanFilter);
+        ScanResult scanResult = dynamoDB.scan(scanRequest);
+        System.out.println("Result: " + scanResult);
+		if(scanResult.getItems().size() > 0) {
+			return Integer.parseInt(scanResult.getItems().get(0).get("rank").getN());
+		}
+		return -1;
+	}
+	
+	public static String getFreeInstance(int requestRank) {
+		for(String instanceID : currentInstancesRanks.keySet()) {
+			int instanceRank = currentInstancesRanks.get(instanceID);
+			if((instanceRank + requestRank) <= INSTANCE_MAX_RANK) {
+				return instanceID;
+			}
+		}
+		return null;
+	}
+	
+	public static void redirectRequest(HttpExchange t, String dns) throws IOException {
+		
+		System.out.println("QUERY: " + t.getRequestURI().getQuery());
+
+		URL url = new URL("http://" + dns + ":8000/r.html?" + t.getRequestURI().getQuery());
+		// URL url = new URL("http://" + dns + ":8000/r.html?");
+		System.out.println("URL");
+		URLConnection connection = url.openConnection();
+		System.out.println("URLConnection");
+
+
+		InputStream is = connection.getInputStream();
+
+		String saveFilePath = Thread.currentThread().getId() + OUTPUT_FILE_NAME;
+
+		// opens an output stream to save into file
+		FileOutputStream outputStream = new FileOutputStream(saveFilePath);
+
+		int bytesRead = -1;
+		byte[] buffer = new byte[2048];
+		while ((bytesRead = is.read(buffer)) != -1) {
+			outputStream.write(buffer, 0, bytesRead);
+		}
+
+		outputStream.close();
+		is.close();
+
+		System.out.println("File downloaded");
+
+		File image = new File(saveFilePath);
+
+		t.sendResponseHeaders(200, image.length());
+
+		OutputStream os = t.getResponseBody();
+		Files.copy(image.toPath(), os);
+		os.close();
+	}
+	
+	/*static void startNewInstance() {
+		DescribeInstancesResult describeInstancesRequest = ec2.describeInstances();
+		List<Reservation> reservations = describeInstancesRequest.getReservations();
+		Set<Instance> instances = new HashSet<Instance>();
+
+		for (Reservation reservation : reservations) {
+			instances.addAll(reservation.getInstances());
+		}
+
+		System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
+		System.out.println("Starting a new instance.");
+		RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
+
+		runInstancesRequest.withImageId("ami-b82d4bd8").withInstanceType("t2.micro").withMinCount(1)
+				.withMaxCount(1).withKeyName("CNV-lab-AWS").withSecurityGroups("launch-wizard-1");
+		RunInstancesResult runInstancesResult = ec2.runInstances(runInstancesRequest);
+		String newInstanceId = runInstancesResult.getReservation().getInstances().get(0).getInstanceId();
+		describeInstancesRequest = ec2.describeInstances();
+		reservations = describeInstancesRequest.getReservations();
+		instances = new HashSet<Instance>();
+
+		for (Reservation reservation : reservations) {
+			instances.addAll(reservation.getInstances());
+		}
+
+		System.out.println("Started instance with id > " + newInstanceId);
+
+		System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
+		System.out.println("Waiting 2 minute. See your instance in the AWS console...");
+		try {
+			Thread.sleep(150000);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+		// System.out.println("Terminating the instance.");
+		// TerminateInstancesRequest termInstanceReq = new
+		// TerminateInstancesRequest();
+		// termInstanceReq.withInstanceIds(newInstanceId);
+		// ec2.terminateInstances(termInstanceReq);
+
+		Long time = System.currentTimeMillis();
+
+		String dns = "";
+		String instanceID = "";
+		Instance inst = null;
+		for (Reservation reservation : reservations) {
+			for (Instance instance : reservation.getInstances()) {
+				if (instance.getInstanceId().equals(newInstanceId)) {
+					while (instance.getPublicDnsName().isEmpty()) {}
+					System.out.println("DNS: " + instance.getPublicDnsName() + " ID:" + instance.getInstanceId());
+					dns = instance.getPublicDnsName();
+					instanceID = instance.getInstanceId();
+					inst = instance;
+					break;
+				}
+			}
+		}
+
+		if(!healthCheck(dns, instanceID)){
+			return;
+		}
+		
+		currentInstances.add(inst);
+	}*/
 
 	static boolean healthCheck(String dns, String instanceID) {
 		String response = new String();
@@ -335,14 +460,18 @@ public class LoadBalancer {
 
 	}
 
-	static class MyThread extends Thread {
+	static class HealthCheckThread extends Thread {
 
 		@Override
 		public void run() {
 			try {
 				while (true) {
-					for (int i = 0; i < createdInstances.size(); i++) {
-						threadToHealthCheck(createdInstances.get(i).getInstanceId());
+					for (String instanceID : currentInstances.keySet()) {
+						//AutoScaler.healthCheck(currentInstances.get(instanceID));
+						boolean healthy = true;
+						if(healthy) {
+							//REMOVER DAS HASHES E FAZER DELETE
+						}
 					}
 					sleep(30000);
 				}
@@ -353,19 +482,16 @@ public class LoadBalancer {
 		}
 	}
 
-	static Map<String, String> queryToMap(String query) {
-		Map<String, String> result = new HashMap<String, String>();
+	static Request setResquest(String query) {
+		String [] params = new String[7];
+		int i = 0;
 		for (String param : query.split("&")) {
-
 			String pair[] = param.split("=");
 			if (pair.length > 1) {
-				result.put(pair[0], pair[1]);
-				System.out.println(pair[0] + " : " + pair[1]);
-			} else {
-				result.put(pair[0], "");
+				params[i++] = pair[1];
 			}
 		}
-		return result;
+		return new Request(params[0], params[1], params[2], params[3], params[4], params[5], params[6]);
 	}
 
 }
