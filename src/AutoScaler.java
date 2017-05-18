@@ -49,7 +49,6 @@ public class AutoScaler {
 
     public static void main(String[] args) throws Exception {
         init();
-
      }
 
     public static Instance startInstance() throws InterruptedException {

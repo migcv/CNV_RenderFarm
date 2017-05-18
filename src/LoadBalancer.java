@@ -120,9 +120,17 @@ public class LoadBalancer {
 		System.out.println("===========================================");
 
 		init();
+		
+		startNewInstance();
+		startNewInstance();
+		
+		System.out.println("Waiting for Instances to be started!");
+		while(currentInstances.size() > 0);
+		System.out.println("Instances > " + currentInstances.size());
+		
 		setupServer();
 		
-		new HealthCheckThread();
+		//new HealthCheckThread();
 
 	}
 
@@ -196,8 +204,12 @@ public class LoadBalancer {
 			
 			public void run() {
 				
-				//Instance instance AutoScaler.startInstance();
 				Instance instance = null;
+				try {
+					instance = AutoScaler.startInstance();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
 				
 				currentInstances.put(instance.getInstanceId(), instance);
 				currentInstancesRanks.put(instance.getInstanceId(), 0);
@@ -215,11 +227,13 @@ public class LoadBalancer {
 			
 			public void run() {
 				
+				Instance instance = currentInstances.get(instaceID);
+				
 				currentInstances.remove(instaceID);
 				currentInstancesRanks.remove(instaceID);
 				currentInstancesResquests.remove(instaceID);
 				
-				//Instance instance AutoScaler.startInstance();
+				AutoScaler.removeInstance(instance);
 				
 			}
 		};
