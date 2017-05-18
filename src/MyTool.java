@@ -51,13 +51,25 @@ public class MyTool {
     
     private static final String TABLE_NAME = "mss";
     
+    // BASIC BLOCK
+    private static final long BB_TINY = 40000; 			// 40 000
     private static final long BB_LOW = 120000; 			// 120 000
+    private static final long BB_MEDIUM = 1000000; 		// 1 000 000
     private static final long BB_HIGH = 2000000;		// 2 000 000
-    private static final long INS_LOW = 21000000;		// 21 000 000
-    private static final long INS_HIGH = 335000000;		// 335 000 000
-    private static final long LOAD_LOW = 180000000;		// 180 000 000
-    private static final long LOAD_HIGH = 1355000000;	// 1 355 000 000
-    private static final long STORE_LOW = 45000000; 	// 45 000 000
+    // INSTRUCTIONS
+    private static final long INS_TINY = 1000000;		// 1 000 000
+    private static final long INS_LOW = 20000000;		// 20 000 000
+    private static final long INS_MEDIUM = 180000000;	// 180 000 000
+    private static final long INS_HIGH = 300000000;		// 300 000 000
+    // LOAD
+    private static final long LOAD_TINY = 70000000;		// 70 000 000
+    private static final long LOAD_LOW =  180000000;	// 180 000 000
+    private static final long LOAD_MEDIUM = 600000000;	// 600 000 000
+    private static final long LOAD_HIGH = 1300000000;	// 1 300 000 000
+    // STORE
+    private static final long STORE_TINY = 15000000; 	// 15 000 000
+    private static final long STORE_LOW = 45000000;		// 45 000 000
+    private static final long STORE_MEDIUM = 150000000; // 150 000 000
     private static final long STORE_HIGH = 330000000;	// 330 000 000
 
     public static void main(String argv[]) {
@@ -230,6 +242,10 @@ public class MyTool {
     public static synchronized void writeRequest(Map<String, String> r) {
     	System.out.println("THREAD > " + getThreadId() + " | " + r.get("f"));
     	request.put(getThreadId(), r);
+    	fieldloadcount.put(getThreadId(), new Long(0));
+        fieldstorecount.put(getThreadId(), new Long(0));
+        i_count.put(getThreadId(), new Long(0));
+        b_count.put(getThreadId(), new Long(0));
     }
     
     private static void init() {
@@ -272,36 +288,44 @@ public class MyTool {
     private static int calcRank() {
     	int rank = 0;
     	// RANK CALC FOR BASIC BLOCKS
-    	if(0 < b_count.get(getThreadId()) && b_count.get(getThreadId()) < BB_LOW) {
+    	if(0 < b_count.get(getThreadId()) && b_count.get(getThreadId()) < BB_TINY) {
     		rank += 1;
-    	} else if(BB_LOW <= b_count.get(getThreadId()) && b_count.get(getThreadId()) < BB_HIGH) {
+    	} else if(BB_TINY <= b_count.get(getThreadId()) && b_count.get(getThreadId()) < BB_LOW) {
     		rank += 2;
-    	} else {
+    	} else if(BB_LOW <= b_count.get(getThreadId()) && b_count.get(getThreadId()) < BB_MEDIUM) {
     		rank += 3;
+    	} else {
+    		rank += 4;
     	}
     	// RANK CALC FOR INSTRUCTIONS
-    	if(0 < i_count.get(getThreadId()) && i_count.get(getThreadId()) < INS_LOW) {
+    	if(0 < i_count.get(getThreadId()) && i_count.get(getThreadId()) < INS_TINY) {
     		rank += 1;
-    	} else if(INS_LOW <= i_count.get(getThreadId()) && i_count.get(getThreadId()) < INS_HIGH) {
+    	} else if(INS_TINY <= i_count.get(getThreadId()) && i_count.get(getThreadId()) < INS_LOW) {
     		rank += 2;
-    	} else {
+    	} else if(INS_LOW <= i_count.get(getThreadId()) && i_count.get(getThreadId()) < INS_MEDIUM) {
     		rank += 3;
+    	} else {
+    		rank += 4;
     	}
     	// RANK CALC FOR FIELD LOADS
-    	if(0 < fieldloadcount.get(getThreadId()) && fieldloadcount.get(getThreadId()) < LOAD_LOW) {
+    	if(0 < fieldloadcount.get(getThreadId()) && fieldloadcount.get(getThreadId()) < LOAD_TINY) {
     		rank += 2;
-    	} else if(LOAD_LOW <= fieldloadcount.get(getThreadId()) && fieldloadcount.get(getThreadId()) < LOAD_HIGH) {
+    	} else if(LOAD_TINY <= fieldloadcount.get(getThreadId()) && fieldloadcount.get(getThreadId()) < LOAD_LOW) {
     		rank += 3;
-    	} else {
+    	} else if(LOAD_LOW <= fieldloadcount.get(getThreadId()) && fieldloadcount.get(getThreadId()) < LOAD_MEDIUM) {
     		rank += 4;
+    	} else {
+    		rank += 5;
     	}
     	// RANK CALC FOR FIELD STORES
-    	if(0 < fieldstorecount.get(getThreadId()) && fieldstorecount.get(getThreadId()) < STORE_LOW) {
+    	if(0 < fieldstorecount.get(getThreadId()) && fieldstorecount.get(getThreadId()) < STORE_TINY) {
     		rank += 2;
-    	} else if(STORE_LOW <= fieldstorecount.get(getThreadId()) && fieldstorecount.get(getThreadId()) < STORE_HIGH) {
+    	} else if(STORE_TINY <= fieldstorecount.get(getThreadId()) && fieldstorecount.get(getThreadId()) < STORE_LOW) {
     		rank += 3;
-    	} else {
+    	} else if(STORE_LOW <= fieldstorecount.get(getThreadId()) && fieldstorecount.get(getThreadId()) < STORE_MEDIUM) {
     		rank += 4;
+    	} else {
+    		rank += 5;
     	}
     	return rank;
     }
