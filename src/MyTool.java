@@ -54,23 +54,23 @@ public class MyTool {
     // BASIC BLOCK
     private static final long BB_TINY = 40000; 			// 40 000
     private static final long BB_LOW = 120000; 			// 120 000
-    private static final long BB_MEDIUM = 1000000; 		// 1 000 000
-    private static final long BB_HIGH = 2000000;		// 2 000 000
+    private static final long BB_MEDIUM = 2000000; 		// 2 000 000
+    private static final long BB_HIGH = 5000000;		// 5 000 000
     // INSTRUCTIONS
     private static final long INS_TINY = 1000000;		// 1 000 000
     private static final long INS_LOW = 20000000;		// 20 000 000
-    private static final long INS_MEDIUM = 180000000;	// 180 000 000
-    private static final long INS_HIGH = 300000000;		// 300 000 000
+    private static final long INS_MEDIUM = 340000000;	// 340 000 000
+    private static final long INS_HIGH = 700000000;		// 700 000 000
     // LOAD
     private static final long LOAD_TINY = 70000000;		// 70 000 000
     private static final long LOAD_LOW =  180000000;	// 180 000 000
-    private static final long LOAD_MEDIUM = 600000000;	// 600 000 000
-    private static final long LOAD_HIGH = 1300000000;	// 1 300 000 000
+    private static final long LOAD_MEDIUM = 1400000000;	// 1 400 000 000
+    private static final long LOAD_HIGH = 2000000000;	// 2 000 000 000
     // STORE
     private static final long STORE_TINY = 15000000; 	// 15 000 000
     private static final long STORE_LOW = 45000000;		// 45 000 000
-    private static final long STORE_MEDIUM = 150000000; // 150 000 000
-    private static final long STORE_HIGH = 330000000;	// 330 000 000
+    private static final long STORE_MEDIUM = 330000000; // 330 000 000
+    private static final long STORE_HIGH = 700000000;	// 700 000 000
 
     public static void main(String argv[]) {
         File file_in = new File(argv[0]);
@@ -221,18 +221,23 @@ public class MyTool {
     	
     	int rank = calcRank();
     	
-    	System.out.println("THREAD > " + getThreadId() + " | Writting on " + TABLE_NAME);
-    	Map<String, AttributeValue> item = newItem(request.get(getThreadId()).get("f"), request.get(getThreadId()).get("sc"), request.get(getThreadId()).get("sr"), request.get(getThreadId()).get("wc"), request.get(getThreadId()).get("wr"), request.get(getThreadId()).get("coff"), request.get(getThreadId()).get("roff"), rank);
-        PutItemRequest putItemRequest = new PutItemRequest(TABLE_NAME, item);
-        PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
-        
+    	System.out.println("Rank > " + rank);
+    	
+    	if(!isRequestDB()) {
+	    	System.out.println("THREAD > " + getThreadId() + " | Writting on " + TABLE_NAME);
+	    	Map<String, AttributeValue> item = newItem(request.get(getThreadId()).get("f"), request.get(getThreadId()).get("sc"), request.get(getThreadId()).get("sr"), request.get(getThreadId()).get("wc"), request.get(getThreadId()).get("wr"), request.get(getThreadId()).get("coff"), request.get(getThreadId()).get("roff"), rank);
+	        PutItemRequest putItemRequest = new PutItemRequest(TABLE_NAME, item);
+	        PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
+	        
+	        System.out.println("Item Added: " + putItemRequest);
+    	}
 
         fieldloadcount.put(getThreadId(), new Long(0));
         fieldstorecount.put(getThreadId(), new Long(0));
         i_count.put(getThreadId(), new Long(0));
         b_count.put(getThreadId(), new Long(0));
         
-        System.out.println("Result: " + putItemResult);
+        
     }
     
     public static synchronized Long getThreadId() {
@@ -294,8 +299,10 @@ public class MyTool {
     		rank += 2;
     	} else if(BB_LOW <= b_count.get(getThreadId()) && b_count.get(getThreadId()) < BB_MEDIUM) {
     		rank += 3;
-    	} else {
+    	} else if(BB_MEDIUM <= b_count.get(getThreadId()) && b_count.get(getThreadId()) < BB_HIGH) {
     		rank += 4;
+    	} else {
+    		rank += 5;
     	}
     	// RANK CALC FOR INSTRUCTIONS
     	if(0 < i_count.get(getThreadId()) && i_count.get(getThreadId()) < INS_TINY) {
@@ -304,8 +311,10 @@ public class MyTool {
     		rank += 2;
     	} else if(INS_LOW <= i_count.get(getThreadId()) && i_count.get(getThreadId()) < INS_MEDIUM) {
     		rank += 3;
-    	} else {
+    	} else if(INS_MEDIUM <= i_count.get(getThreadId()) && i_count.get(getThreadId()) < INS_HIGH) {
     		rank += 4;
+    	} else {
+    		rank += 5;
     	}
     	// RANK CALC FOR FIELD LOADS
     	if(0 < fieldloadcount.get(getThreadId()) && fieldloadcount.get(getThreadId()) < LOAD_TINY) {
@@ -314,8 +323,10 @@ public class MyTool {
     		rank += 3;
     	} else if(LOAD_LOW <= fieldloadcount.get(getThreadId()) && fieldloadcount.get(getThreadId()) < LOAD_MEDIUM) {
     		rank += 4;
-    	} else {
+    	} else if(LOAD_MEDIUM <= fieldloadcount.get(getThreadId()) && fieldloadcount.get(getThreadId()) < LOAD_HIGH) {
     		rank += 5;
+    	} else {
+    		rank += 6;
     	}
     	// RANK CALC FOR FIELD STORES
     	if(0 < fieldstorecount.get(getThreadId()) && fieldstorecount.get(getThreadId()) < STORE_TINY) {
@@ -324,10 +335,52 @@ public class MyTool {
     		rank += 3;
     	} else if(STORE_LOW <= fieldstorecount.get(getThreadId()) && fieldstorecount.get(getThreadId()) < STORE_MEDIUM) {
     		rank += 4;
-    	} else {
+    	} else if(STORE_MEDIUM <= fieldstorecount.get(getThreadId()) && fieldstorecount.get(getThreadId()) < STORE_HIGH) {
     		rank += 5;
+    	} else {
+    		rank += 6;
     	}
     	return rank;
     }
+    
+    private static boolean isRequestDB() {
+		
+		HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
+		Condition condition = new Condition()
+	            .withComparisonOperator(ComparisonOperator.EQ.toString())
+	            .withAttributeValueList(new AttributeValue(request.get(getThreadId()).get("f")));
+	    scanFilter.put("filename", condition);
+        condition = new Condition()
+                .withComparisonOperator(ComparisonOperator.EQ.toString())
+                .withAttributeValueList(new AttributeValue(request.get(getThreadId()).get("sc")));
+        scanFilter.put("scols", condition);
+        condition = new Condition()
+            .withComparisonOperator(ComparisonOperator.EQ.toString())
+            .withAttributeValueList(new AttributeValue(request.get(getThreadId()).get("sr")));
+        scanFilter.put("srows", condition);
+        condition = new Condition()
+                .withComparisonOperator(ComparisonOperator.EQ.toString())
+                .withAttributeValueList(new AttributeValue(request.get(getThreadId()).get("wc")));
+        scanFilter.put("wcols", condition);
+        condition = new Condition()
+                .withComparisonOperator(ComparisonOperator.EQ.toString())
+                .withAttributeValueList(new AttributeValue(request.get(getThreadId()).get("wr")));
+        scanFilter.put("wrows", condition);
+        condition = new Condition()
+                .withComparisonOperator(ComparisonOperator.EQ.toString())
+                .withAttributeValueList(new AttributeValue(request.get(getThreadId()).get("coff")));
+        scanFilter.put("coff", condition);
+        condition = new Condition()
+                .withComparisonOperator(ComparisonOperator.EQ.toString())
+                .withAttributeValueList(new AttributeValue(request.get(getThreadId()).get("roff")));
+        scanFilter.put("roff", condition);
+        ScanRequest scanRequest = new ScanRequest(TABLE_NAME).withScanFilter(scanFilter);
+        ScanResult scanResult = dynamoDB.scan(scanRequest);
+        System.out.println("Result: " + scanResult);
+		if(scanResult.getItems().size() > 0) {
+			return true;
+		}
+		return false;
+	}
 }
 
