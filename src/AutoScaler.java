@@ -39,6 +39,7 @@ public class AutoScaler {
 	static AmazonCloudWatch cloudWatch;
 
 	public static ConcurrentHashMap<String, Instance> pendingInstances = new ConcurrentHashMap<>();
+	static int pendingInstance = 0;
 
 	public static Instance startInstance() throws InterruptedException {
 
@@ -67,6 +68,7 @@ public class AutoScaler {
 				instances.addAll(reservation.getInstances());
 			}
 
+			pendingInstance++;
 			// wait for instance to launch
 			Thread.sleep(LAUNCH_INSTANCE_OFFSET);
 
@@ -85,24 +87,26 @@ public class AutoScaler {
 					}
 				}
 			}
-			
+
 			pendingInstances.put(instanceID, inst);
+			
+			System.out.println("PENDING INSTANCES SIZE: " + pendingInstances.size()  + " "+pendingInstance);
 
 			// while (newInstance.getPublicDnsName().isEmpty()) {}
 
 			System.out.println("DNS:" + dns + " ID: " + instanceID);
 
 			if (inst != null && !initalHealthCheck(inst)) { // instance terminated
+				pendingInstance--;											
 				pendingInstances.remove(instanceID);
-				return null;
-			}
 
-			if (inst != null) {
+			} else if (inst != null) {
 				// if passed health check, add to current and remove from
 				// pending
 				LoadBalancer.currentInstances.put(instanceID, inst);
+				pendingInstance--;
 				pendingInstances.remove(instanceID);
-
+				System.out.println("PENDING INSTANCES SIZE AFTER DELETE: " + pendingInstances.size() + " " + pendingInstance);
 				System.out.println("Started a new instance with id " + inst.getInstanceId());
 			}
 			return inst;
@@ -172,15 +176,33 @@ public class AutoScaler {
 		}
 	}
 
+	public static void removeUnusedInstances() {
+		ConcurrentHashMap<String, Instance> currentInstances = LoadBalancer.currentInstances;
+		ConcurrentHashMap<String, Integer> currentInstancesRanks = LoadBalancer.currentInstancesRanks;
+		int numberInstances = 0;
+
+		for (String instanceID : currentInstancesRanks.keySet()) {
+			if (currentInstancesRanks.get(instanceID) != null && currentInstancesRanks.get(instanceID) == 0) {
+				numberInstances++;
+			}
+			if (currentInstancesRanks.get(instanceID) != null && currentInstancesRanks.get(instanceID) == 0 && numberInstances > 2) {
+				System.out.println("--------------------------------VOU REMOVER "+ instanceID);
+				removeInstance(currentInstances.get(instanceID));
+				LoadBalancer.removeInstanceInfo(instanceID);
+			}
+		}
+
+	}
+
 	public static void removeInstance(Instance instance) {
 		TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
 		termInstanceReq.withInstanceIds(instance.getInstanceId());
 		LoadBalancer.ec2.terminateInstances(termInstanceReq);
-		LoadBalancer.currentInstances.remove(instance.getInstanceId());
+		System.out.println("Removi " + instance.getInstanceId());
 	}
 
 	public static boolean isAnyInstancePending() {
-		return pendingInstances.size() > 0;
+		return pendingInstance > 0;
 	}
 
 	public static boolean initalHealthCheck(Instance instance) {
@@ -203,8 +225,8 @@ public class AutoScaler {
 			}
 
 		} catch (IOException e) {
-			System.out.println("Terminating the new instance with id: " + instance.getInstanceId());
-			//removeInstance(instance);
+			System.out.println("INITIAL HEALTH_CHECK: Terminating the new instance with id: " + instance.getInstanceId());
+			removeInstance(instance);
 			return false;
 		}
 
@@ -217,7 +239,6 @@ public class AutoScaler {
 		URL url;
 
 		try {
-			System.out.println("ENTREI no health check");
 			url = new URL("http://" + instance.getPublicDnsName() + ":8000/r.html?");
 			connection = url.openConnection();
 			Scanner s = new Scanner(connection.getInputStream());
@@ -232,7 +253,7 @@ public class AutoScaler {
 
 		} catch (IOException e) {
 			System.out.println("Terminating the new instance with id: " + instance.getInstanceId());
-			//removeInstance(instance);
+			removeInstance(instance);
 			return false;
 		}
 
