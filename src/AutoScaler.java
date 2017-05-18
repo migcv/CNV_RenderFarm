@@ -22,188 +22,227 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class AutoScaler {
 
-    public final static int HIGH_CPU_USAGE = 80;
-    public final static int LOW_CPU_USAGE = 20;
-    public final static long METRICS_OFFSET = 24 * 60 * 1000 * 60; // to get metrics within the last 24h
-    public final static long LAUNCH_INSTANCE_OFFSET = 3 * 1000 * 60; // 3 min for instance launch time offset
-    public final static long UNHEALTHY_THRESHOLD = 3;
+	public final static int HIGH_CPU_USAGE = 80;
+	public final static int LOW_CPU_USAGE = 20;
+	public final static long METRICS_OFFSET = 24 * 60 * 1000 * 60; // to get
+																	// metrics
+																	// within
+																	// the last
+																	// 24h
+	public final static long LAUNCH_INSTANCE_OFFSET = 3 * 1000 * 60; // 3 min
+																		// for
+																		// instance
+																		// launch
+																		// time
+																		// offset
+	public final static long UNHEALTHY_THRESHOLD = 3;
 
-    static AmazonCloudWatch cloudWatch;
+	static AmazonCloudWatch cloudWatch;
 
-    public static ConcurrentHashMap<String, Instance> pendingInstances = new ConcurrentHashMap<>();
+	public static ConcurrentHashMap<String, Instance> pendingInstances = new ConcurrentHashMap<>();
 
-    private static void init() throws Exception {
+	public static Instance startInstance() throws InterruptedException {
 
-        AWSCredentials credentials = null;
-        try {
-            credentials = new ProfileCredentialsProvider().getCredentials();
-        } catch (Exception e) {
-            throw new AmazonClientException(
-                    "Cannot load the credentials from the credential profiles file. " +
-                            "Please make sure that your credentials file is at the correct " +
-                            "location (~/.aws/credentials), and is in valid format.",
-                    e);
-        }
-        cloudWatch = AmazonCloudWatchClientBuilder.standard().withRegion("us-west-2").withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
-    }
+		try {
+			System.out.println("Starting a new instance.");
 
-    public static void main(String[] args) throws Exception {
-        init();
-     }
+			DescribeInstancesResult describeInstancesRequest = LoadBalancer.ec2.describeInstances();
+			List<Reservation> reservations = describeInstancesRequest.getReservations();
+			Set<Instance> instances = new HashSet<Instance>();
 
-    public static Instance startInstance() throws InterruptedException {
+			RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
 
-        try {
-            System.out.println("Starting a new instance.");
-            RunInstancesRequest runInstancesRequest =
-                    new RunInstancesRequest();
+			/* TODO: configure to use your AMI, key and security group */
+			runInstancesRequest.withImageId("ami-b82d4bd8").withInstanceType("t2.micro").withMinCount(1).withMaxCount(1)
+					.withKeyName("CNV-lab-AWS").withSecurityGroups("launch-wizard-1");
+			RunInstancesResult runInstancesResult = LoadBalancer.ec2.runInstances(runInstancesRequest);
 
-            /* TODO: configure to use your AMI, key and security group */
-            runInstancesRequest.withImageId("ami-b82d4bd8")
-                    .withInstanceType("t2.micro")
-                    .withMinCount(1)
-                    .withMaxCount(1)
-                    .withKeyName("CNV-lab-AWS")
-                    .withSecurityGroups("launch-wizard-1");
-            RunInstancesResult runInstancesResult =  LoadBalancer.ec2.runInstances(runInstancesRequest);
+			Instance newInstance = runInstancesResult.getReservation().getInstances().get(0);
+			pendingInstances.put(newInstance.getInstanceId(), newInstance);
 
-            Instance newInstance = runInstancesResult.getReservation().getInstances().get(0);
-            pendingInstances.put(newInstance.getInstanceId(),newInstance);
+			String newInstanceId = runInstancesResult.getReservation().getInstances().get(0).getInstanceId();
+			describeInstancesRequest = LoadBalancer.ec2.describeInstances();
+			reservations = describeInstancesRequest.getReservations();
+			instances = new HashSet<Instance>();
 
-            // wait for instance to launch
-            Thread.sleep(LAUNCH_INSTANCE_OFFSET);
-            while (newInstance.getPublicDnsName().isEmpty()) {}
+			for (Reservation reservation : reservations) {
+				instances.addAll(reservation.getInstances());
+			}
 
-            if(!healthCheck(newInstance)) { // instance terminated
-                pendingInstances.remove(newInstance);
-                return null;
-            }
+			// wait for instance to launch
+			Thread.sleep(LAUNCH_INSTANCE_OFFSET);
 
-            // if passed health check, add to current and remove from pending
-            LoadBalancer.currentInstances.put(newInstance.getInstanceId(),newInstance);
-            pendingInstances.remove(newInstance);
+			String dns = "";
+			String instanceID = "";
+			Instance inst = null;
+			for (Reservation reservation : reservations) {
+				for (Instance instance : reservation.getInstances()) {
+					if (instance.getInstanceId().equals(newInstanceId)) {
+						// while (instance.getPublicDnsName().isEmpty()) {}
+						System.out.println("DNS: " + instance.getPublicDnsName() + " ID:" + instance.getInstanceId());
+						dns = instance.getPublicDnsName();
+						instanceID = instance.getInstanceId();
+						inst = instance;
+						break;
+					}
+				}
+			}
 
-            System.out.println("Started a new instance with id " + newInstance.getInstanceId());
+			// while (newInstance.getPublicDnsName().isEmpty()) {}
 
-            return newInstance;
+			System.out.println("DNS:" + dns + " ID: " + instanceID);
 
-        } catch (AmazonServiceException ase) {
-            System.out.println("Caught Exception: " + ase.getMessage());
-            System.out.println("Reponse Status Code: " + ase.getStatusCode());
-            System.out.println("Error Code: " + ase.getErrorCode());
-            System.out.println("Request ID: " + ase.getRequestId());
-        }
+			if (inst != null && !healthCheck(inst)) { // instance terminated
+				pendingInstances.remove(newInstance);
+				return null;
+			}
 
-        return null;
-    }
+			if (inst != null) {
+				// if passed health check, add to current and remove from
+				// pending
+				LoadBalancer.currentInstances.put(inst.getInstanceId(), inst);
+				pendingInstances.remove(newInstance);
 
+				System.out.println("Started a new instance with id " + inst.getInstanceId());
+			}
+			return inst;
 
+		} catch (AmazonServiceException ase) {
+			System.out.println("Caught Exception: " + ase.getMessage());
+			System.out.println("Reponse Status Code: " + ase.getStatusCode());
+			System.out.println("Error Code: " + ase.getErrorCode());
+			System.out.println("Request ID: " + ase.getRequestId());
+		}
 
-    public static void removeUnusedInstance() {
+		return null;
+	}
 
-        Dimension instanceDimension = new Dimension();
-        List<Dimension> dims = new ArrayList<Dimension>();
-        instanceDimension.setName("InstanceId");
-        dims.add(instanceDimension);
-        boolean existsInstancesHighCpu = false;
-        int nrInstancesLowCpu = 0;
-        boolean canRemoveInstance = false;
-        Instance instanceToRemove = null;
+	public static void removeUnusedInstance() {
 
-        for (Map.Entry<String, Instance> entry : LoadBalancer.currentInstances.entrySet()) {
-            Instance instance = entry.getValue();
-            String instanceId = entry.getKey();
-            String instanceState = instance.getState().getName();
+		Dimension instanceDimension = new Dimension();
+		List<Dimension> dims = new ArrayList<Dimension>();
+		instanceDimension.setName("InstanceId");
+		dims.add(instanceDimension);
+		boolean existsInstancesHighCpu = false;
+		int nrInstancesLowCpu = 0;
+		boolean canRemoveInstance = false;
+		Instance instanceToRemove = null;
 
-            // used check if instance wasn't started less than 3 minutes ago
-            // in order to not remove an instance that just started
-            long timeSinceInstanceStart = new Date().getTime() - instance.getLaunchTime().getTime();
+		for (Map.Entry<String, Instance> entry : LoadBalancer.currentInstances.entrySet()) {
+			Instance instance = entry.getValue();
+			String instanceId = entry.getKey();
+			String instanceState = instance.getState().getName();
 
-            if (instanceState.equals("running")) {
-                instanceDimension.setValue(instanceId);
-                GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
-                        .withStartTime(new Date(new Date().getTime() - METRICS_OFFSET))
-                        .withNamespace("AWS/EC2")
-                        .withPeriod(60)
-                        .withMetricName("CPUUtilization")
-                        .withStatistics("Average")
-                        .withDimensions(instanceDimension)
-                        .withEndTime(new Date());
+			// used check if instance wasn't started less than 3 minutes ago
+			// in order to not remove an instance that just started
+			long timeSinceInstanceStart = new Date().getTime() - instance.getLaunchTime().getTime();
 
-                GetMetricStatisticsResult getMetricStatisticsResult = cloudWatch.getMetricStatistics(request);
-                List<Datapoint> datapoints = getMetricStatisticsResult.getDatapoints();
+			if (instanceState.equals("running")) {
+				instanceDimension.setValue(instanceId);
+				GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
+						.withStartTime(new Date(new Date().getTime() - METRICS_OFFSET)).withNamespace("AWS/EC2")
+						.withPeriod(60).withMetricName("CPUUtilization").withStatistics("Average")
+						.withDimensions(instanceDimension).withEndTime(new Date());
 
-                for (Datapoint dp : datapoints) {
-                    double cpuAverageInstance = dp.getAverage();
-                    if(cpuAverageInstance < LOW_CPU_USAGE) {
-                        nrInstancesLowCpu++;
-                    } else if(cpuAverageInstance > HIGH_CPU_USAGE) {
-                        existsInstancesHighCpu = true;
-                    }
-                }
-            }
+				GetMetricStatisticsResult getMetricStatisticsResult = cloudWatch.getMetricStatistics(request);
+				List<Datapoint> datapoints = getMetricStatisticsResult.getDatapoints();
 
-            if((existsInstancesHighCpu || nrInstancesLowCpu >= 2) && timeSinceInstanceStart > LAUNCH_INSTANCE_OFFSET) {
-                canRemoveInstance = true;
-                instanceToRemove = instance;
-                break;
-            }
-        }
+				for (Datapoint dp : datapoints) {
+					double cpuAverageInstance = dp.getAverage();
+					if (cpuAverageInstance < LOW_CPU_USAGE) {
+						nrInstancesLowCpu++;
+					} else if (cpuAverageInstance > HIGH_CPU_USAGE) {
+						existsInstancesHighCpu = true;
+					}
+				}
+			}
 
-        if(canRemoveInstance) {
-            removeInstance(instanceToRemove);
-        } else { // no need to remove any instance
-            return;
-        }
+			if ((existsInstancesHighCpu || nrInstancesLowCpu >= 2) && timeSinceInstanceStart > LAUNCH_INSTANCE_OFFSET) {
+				canRemoveInstance = true;
+				instanceToRemove = instance;
+				break;
+			}
+		}
 
-    }
+		if (canRemoveInstance) {
+			removeInstance(instanceToRemove);
+		} else { // no need to remove any instance
+			return;
+		}
 
-    public static void removeInstance(Instance instance) {
-        TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
-        termInstanceReq.withInstanceIds(instance.getInstanceId());
-        LoadBalancer.ec2.terminateInstances(termInstanceReq);
-        LoadBalancer.currentInstances.remove(instance.getInstanceId());
-    }
+	}
 
-    public boolean isAnyInstancePending() {
-        return pendingInstances.size() > 0;
-    }
+	public static void removeInstance(Instance instance) {
+		TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
+		termInstanceReq.withInstanceIds(instance.getInstanceId());
+		LoadBalancer.ec2.terminateInstances(termInstanceReq);
+		LoadBalancer.currentInstances.remove(instance.getInstanceId());
+	}
 
+	public boolean isAnyInstancePending() {
+		return pendingInstances.size() > 0;
+	}
 
-    public static boolean healthCheck(Instance instance) {
-        String response = new String();
-        int healthy = 0;
-        int unhealthy = 0;
-        URLConnection connection;
-        URL url;
+	public static boolean healthCheck(Instance instance) {
+		String response = new String();
+		URLConnection connection;
+		URL url;
 
-        while (healthy < 4) {
-            try {
-                url = new URL("http://" + instance.getPublicDnsName() + ":8000/r.html?");
-                connection = url.openConnection();
-                Scanner s = new Scanner(connection.getInputStream());
-                while (s.hasNext()) {
-                    response += s.next();
-                }
-                s.close();
+		try {
+			System.out.println("ENTREI no health check");
+			url = new URL("http://" + instance.getPublicDnsName() + ":8000/r.html?");
+			connection = url.openConnection();
+			Scanner s = new Scanner(connection.getInputStream());
+			while (s.hasNext()) {
+				response += s.next();
+			}
+			s.close();
 
-                if (response.equals("OK")) {
-                    unhealthy = 0;
-                    healthy += 1;
-                    response = "";
-                }
+			if (response.equals("OK")) {
+				return true;
+			}
 
-            } catch (IOException e) {
-                healthy = 0;
-                unhealthy += 1;
-                if (unhealthy == UNHEALTHY_THRESHOLD) {
-                    System.out.println("Terminating the new instance with id: " + instance.getInstanceId());
-                    removeInstance(instance);
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
+		} catch (IOException e) {
+			System.out.println("Terminating the new instance with id: " + instance.getInstanceId());
+			//removeInstance(instance);
+			return false;
+		}
+
+		return true;
+	}
+
+	static void threadToHealthCheck(String newInstanceId) throws Exception {
+
+		DescribeInstancesResult describeInstancesRequest = LoadBalancer.ec2.describeInstances();
+		List<Reservation> reservations = describeInstancesRequest.getReservations();
+		Set<Instance> instances = new HashSet<Instance>();
+
+		for (Reservation reservation : reservations) {
+			instances.addAll(reservation.getInstances());
+		}
+
+		for (Reservation reservation : reservations) {
+			for (Instance instance : reservation.getInstances()) {
+				if (instance.getInstanceId().equals(newInstanceId)) {
+					String response = new String();
+					// URL url = new URL("http://" + dns + ":8000/r.html?" +
+					// t.getRequestURI().getQuery());
+					URL url = new URL("http://" + instance.getPublicDnsName() + ":8000/r.html?");
+					System.out.println("URL");
+					URLConnection connection = url.openConnection();
+					System.out.println("URLConnection");
+					Scanner s = new Scanner(connection.getInputStream());
+					System.out.println("Scanner");
+					while (s.hasNext()) {
+						response += s.next();
+						System.out.println("Response: " + response);
+					}
+					s.close();
+					break;
+				}
+			}
+		}
+
+	}
 
 }

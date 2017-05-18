@@ -74,7 +74,7 @@ public class LoadBalancer {
 	
 	static final String TABLE_NAME = "mss";
 	
-	static final int INSTANCE_MAX_RANK = 20;
+	static final int INSTANCE_MAX_RANK = 31;
 
 	/**
 	 * The only information needed to create a client are security credentials
@@ -125,7 +125,7 @@ public class LoadBalancer {
 		startNewInstance();
 		
 		System.out.println("Waiting for Instances to be started!");
-		while(currentInstances.size() > 0);
+		while(currentInstances.size() <= 0);
 		System.out.println("Instances > " + currentInstances.size());
 		
 		setupServer();
@@ -171,6 +171,9 @@ public class LoadBalancer {
 				
 				if(rank == -1) {
 					// NEW REQUEST
+					
+					//String instanceID = getFreeInstance(18);
+					
 				} else {
 					String instanceID = getFreeInstance(request.getRank());
 					if(instanceID != null) {
@@ -246,31 +249,31 @@ public class LoadBalancer {
 		HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
 		Condition condition = new Condition()
 	            .withComparisonOperator(ComparisonOperator.EQ.toString())
-	            .withAttributeValueList(new AttributeValue().withN(request.getFilename()));
+	            .withAttributeValueList(new AttributeValue(request.getFilename()));
 	    scanFilter.put("filename", condition);
         condition = new Condition()
                 .withComparisonOperator(ComparisonOperator.EQ.toString())
-                .withAttributeValueList(new AttributeValue().withN(request.getScols()));
+                .withAttributeValueList(new AttributeValue(request.getScols()));
         scanFilter.put("scols", condition);
         condition = new Condition()
             .withComparisonOperator(ComparisonOperator.EQ.toString())
-            .withAttributeValueList(new AttributeValue().withN(request.getSrows()));
+            .withAttributeValueList(new AttributeValue(request.getSrows()));
         scanFilter.put("srows", condition);
         condition = new Condition()
                 .withComparisonOperator(ComparisonOperator.EQ.toString())
-                .withAttributeValueList(new AttributeValue().withN(request.getWcols()));
+                .withAttributeValueList(new AttributeValue(request.getWcols()));
         scanFilter.put("wcols", condition);
         condition = new Condition()
                 .withComparisonOperator(ComparisonOperator.EQ.toString())
-                .withAttributeValueList(new AttributeValue().withN(request.getWrows()));
+                .withAttributeValueList(new AttributeValue(request.getWrows()));
         scanFilter.put("wrows", condition);
         condition = new Condition()
                 .withComparisonOperator(ComparisonOperator.EQ.toString())
-                .withAttributeValueList(new AttributeValue().withN(request.getCoff()));
+                .withAttributeValueList(new AttributeValue(request.getCoff()));
         scanFilter.put("coff", condition);
         condition = new Condition()
                 .withComparisonOperator(ComparisonOperator.EQ.toString())
-                .withAttributeValueList(new AttributeValue().withN(request.getRoff()));
+                .withAttributeValueList(new AttributeValue(request.getRoff()));
         scanFilter.put("roff", condition);
         ScanRequest scanRequest = new ScanRequest(TABLE_NAME).withScanFilter(scanFilter);
         ScanResult scanResult = dynamoDB.scan(scanRequest);
@@ -328,117 +331,6 @@ public class LoadBalancer {
 		Files.copy(image.toPath(), os);
 		os.close();
 	}
-	
-	/*static void startNewInstance() {
-		DescribeInstancesResult describeInstancesRequest = ec2.describeInstances();
-		List<Reservation> reservations = describeInstancesRequest.getReservations();
-		Set<Instance> instances = new HashSet<Instance>();
-
-		for (Reservation reservation : reservations) {
-			instances.addAll(reservation.getInstances());
-		}
-
-		System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
-		System.out.println("Starting a new instance.");
-		RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
-
-		runInstancesRequest.withImageId("ami-b82d4bd8").withInstanceType("t2.micro").withMinCount(1)
-				.withMaxCount(1).withKeyName("CNV-lab-AWS").withSecurityGroups("launch-wizard-1");
-		RunInstancesResult runInstancesResult = ec2.runInstances(runInstancesRequest);
-		String newInstanceId = runInstancesResult.getReservation().getInstances().get(0).getInstanceId();
-		describeInstancesRequest = ec2.describeInstances();
-		reservations = describeInstancesRequest.getReservations();
-		instances = new HashSet<Instance>();
-
-		for (Reservation reservation : reservations) {
-			instances.addAll(reservation.getInstances());
-		}
-
-		System.out.println("Started instance with id > " + newInstanceId);
-
-		System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
-		System.out.println("Waiting 2 minute. See your instance in the AWS console...");
-		try {
-			Thread.sleep(150000);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-		// System.out.println("Terminating the instance.");
-		// TerminateInstancesRequest termInstanceReq = new
-		// TerminateInstancesRequest();
-		// termInstanceReq.withInstanceIds(newInstanceId);
-		// ec2.terminateInstances(termInstanceReq);
-
-		Long time = System.currentTimeMillis();
-
-		String dns = "";
-		String instanceID = "";
-		Instance inst = null;
-		for (Reservation reservation : reservations) {
-			for (Instance instance : reservation.getInstances()) {
-				if (instance.getInstanceId().equals(newInstanceId)) {
-					while (instance.getPublicDnsName().isEmpty()) {}
-					System.out.println("DNS: " + instance.getPublicDnsName() + " ID:" + instance.getInstanceId());
-					dns = instance.getPublicDnsName();
-					instanceID = instance.getInstanceId();
-					inst = instance;
-					break;
-				}
-			}
-		}
-
-		if(!healthCheck(dns, instanceID)){
-			return;
-		}
-		
-		currentInstances.add(inst);
-	}*/
-
-	static boolean healthCheck(String dns, String instanceID) {
-		String response = new String();
-		int healthy = 0;
-		int unhealthy = 0;
-		URLConnection connection;
-		URL url;
-		// URL url = new URL("http://" + dns + ":8000/r.html?" +
-		// t.getRequestURI().getQuery());
-		while (healthy < 3) {
-			try {
-				url = new URL("http://" + dns + ":8000/r.html?");
-				connection = url.openConnection();
-				Scanner s = new Scanner(connection.getInputStream());
-				while (s.hasNext()) {
-					response += s.next();
-					System.out.println("Response: " + response);
-				}
-				s.close();
-
-				if (response.equals("OK")) {
-					System.out.println("HEALTY");
-					unhealthy = 0;
-					healthy += 1;
-					response = "";
-				}
-				System.out.println("ACABEI");
-
-			} catch (IOException e) {
-				healthy = 0;
-				unhealthy += 1;
-				url = null;
-				connection = null;
-				System.out.println("UNHEALTY");
-				if (unhealthy > 2) {
-					System.out.println("Terminating the instance.");
-					TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
-					termInstanceReq.withInstanceIds(instanceID);
-					ec2.terminateInstances(termInstanceReq);
-					return false;
-				}
-				// e.printStackTrace();
-			}
-		}
-		return true;
-	}
 
 	static void threadToHealthCheck(String newInstanceId) throws Exception {
 
@@ -481,10 +373,12 @@ public class LoadBalancer {
 			try {
 				while (true) {
 					for (String instanceID : currentInstances.keySet()) {
-						//AutoScaler.healthCheck(currentInstances.get(instanceID));
-						boolean healthy = true;
-						if(healthy) {
-							//REMOVER DAS HASHES E FAZER DELETE
+						boolean healthy = AutoScaler.healthCheck(currentInstances.get(instanceID));
+						if(!healthy) {
+							currentInstances.remove(instanceID);
+							currentInstancesRanks.remove(instanceID);
+							currentInstancesResquests.remove(instanceID);
+							removeInstance(instanceID);
 						}
 					}
 					sleep(30000);
