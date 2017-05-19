@@ -12,7 +12,6 @@ import com.amazonaws.services.cloudwatch.model.GetMetricStatisticsResult;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.*;
-import sun.awt.image.ImageWatched;
 
 import java.io.IOException;
 import java.net.URL;
@@ -40,6 +39,7 @@ public class AutoScaler {
 	static AmazonCloudWatch cloudWatch;
 
 	public static ConcurrentHashMap<String, Instance> pendingInstances = new ConcurrentHashMap<>();
+	static int pendingInstance = 0;
 
 	public static Instance startInstance() throws InterruptedException {
 
@@ -53,12 +53,11 @@ public class AutoScaler {
 			RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
 
 			/* TODO: configure to use your AMI, key and security group */
-			runInstancesRequest.withImageId("ami-b82d4bd8").withInstanceType("t2.micro").withMinCount(1).withMaxCount(1)
+			runInstancesRequest.withImageId("ami-a85731c8").withInstanceType("t2.micro").withMinCount(1).withMaxCount(1)
 					.withKeyName("CNV-lab-AWS").withSecurityGroups("launch-wizard-1");
 			RunInstancesResult runInstancesResult = LoadBalancer.ec2.runInstances(runInstancesRequest);
 
 			Instance newInstance = runInstancesResult.getReservation().getInstances().get(0);
-			pendingInstances.put(newInstance.getInstanceId(), newInstance);
 
 			String newInstanceId = runInstancesResult.getReservation().getInstances().get(0).getInstanceId();
 			describeInstancesRequest = LoadBalancer.ec2.describeInstances();
@@ -69,6 +68,7 @@ public class AutoScaler {
 				instances.addAll(reservation.getInstances());
 			}
 
+			pendingInstance++;
 			// wait for instance to launch
 			Thread.sleep(LAUNCH_INSTANCE_OFFSET);
 
@@ -88,21 +88,25 @@ public class AutoScaler {
 				}
 			}
 
+			pendingInstances.put(instanceID, inst);
+			
+			System.out.println("PENDING INSTANCES SIZE: " + pendingInstances.size()  + " "+pendingInstance);
+
 			// while (newInstance.getPublicDnsName().isEmpty()) {}
 
 			System.out.println("DNS:" + dns + " ID: " + instanceID);
 
-			if (inst != null && !healthCheck(inst)) { // instance terminated
-				pendingInstances.remove(newInstance);
-				return null;
-			}
+			if (inst != null && !initalHealthCheck(inst)) { // instance terminated
+				pendingInstance--;											
+				pendingInstances.remove(instanceID);
 
-			if (inst != null) {
+			} else if (inst != null) {
 				// if passed health check, add to current and remove from
 				// pending
-				LoadBalancer.currentInstances.put(inst.getInstanceId(), inst);
-				pendingInstances.remove(newInstance);
-
+				LoadBalancer.currentInstances.put(instanceID, inst);
+				pendingInstance--;
+				pendingInstances.remove(instanceID);
+				System.out.println("PENDING INSTANCES SIZE AFTER DELETE: " + pendingInstances.size() + " " + pendingInstance);
 				System.out.println("Started a new instance with id " + inst.getInstanceId());
 			}
 			return inst;
@@ -164,10 +168,28 @@ public class AutoScaler {
 			}
 		}
 
-		if (canRemoveInstance) {
+		if (canRemoveInstance && instanceToRemove != null) {
+			LoadBalancer.removeInstanceInfo(instanceToRemove.getInstanceId());
 			removeInstance(instanceToRemove);
 		} else { // no need to remove any instance
 			return;
+		}
+	}
+
+	public static void removeUnusedInstances() {
+		ConcurrentHashMap<String, Instance> currentInstances = LoadBalancer.currentInstances;
+		ConcurrentHashMap<String, Integer> currentInstancesRanks = LoadBalancer.currentInstancesRanks;
+		int numberInstances = 0;
+
+		for (String instanceID : currentInstancesRanks.keySet()) {
+			if (currentInstancesRanks.get(instanceID) != null && currentInstancesRanks.get(instanceID) == 0) {
+				numberInstances++;
+			}
+			if (currentInstancesRanks.get(instanceID) != null && currentInstancesRanks.get(instanceID) == 0 && numberInstances > 2) {
+				System.out.println("Remove Unused Instances : TERMINATING instance > " + instanceID);
+				removeInstance(currentInstances.get(instanceID));
+				LoadBalancer.removeInstanceInfo(instanceID);
+			}
 		}
 
 	}
@@ -176,20 +198,19 @@ public class AutoScaler {
 		TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
 		termInstanceReq.withInstanceIds(instance.getInstanceId());
 		LoadBalancer.ec2.terminateInstances(termInstanceReq);
-		LoadBalancer.currentInstances.remove(instance.getInstanceId());
+		System.out.println("Removi " + instance.getInstanceId());
 	}
 
-	public boolean isAnyInstancePending() {
-		return pendingInstances.size() > 0;
+	public static boolean isAnyInstancePending() {
+		return pendingInstance > 0;
 	}
 
-	public static boolean healthCheck(Instance instance) {
+	public static boolean initalHealthCheck(Instance instance) {
 		String response = new String();
 		URLConnection connection;
 		URL url;
 
 		try {
-			System.out.println("ENTREI no health check");
 			url = new URL("http://" + instance.getPublicDnsName() + ":8000/r.html?");
 			connection = url.openConnection();
 			Scanner s = new Scanner(connection.getInputStream());
@@ -203,46 +224,40 @@ public class AutoScaler {
 			}
 
 		} catch (IOException e) {
-			System.out.println("Terminating the new instance with id: " + instance.getInstanceId());
-			//removeInstance(instance);
+			System.out.println("Initial HealthCheck : TERMINATING instance > " + instance.getInstanceId());
+			removeInstance(instance);
 			return false;
 		}
 
 		return true;
 	}
 
-	static void threadToHealthCheck(String newInstanceId) throws Exception {
+	static boolean healthCheck(Instance instance) throws Exception {
+		String response = new String();
+		URLConnection connection;
+		URL url;
 
-		DescribeInstancesResult describeInstancesRequest = LoadBalancer.ec2.describeInstances();
-		List<Reservation> reservations = describeInstancesRequest.getReservations();
-		Set<Instance> instances = new HashSet<Instance>();
-
-		for (Reservation reservation : reservations) {
-			instances.addAll(reservation.getInstances());
-		}
-
-		for (Reservation reservation : reservations) {
-			for (Instance instance : reservation.getInstances()) {
-				if (instance.getInstanceId().equals(newInstanceId)) {
-					String response = new String();
-					// URL url = new URL("http://" + dns + ":8000/r.html?" +
-					// t.getRequestURI().getQuery());
-					URL url = new URL("http://" + instance.getPublicDnsName() + ":8000/r.html?");
-					System.out.println("URL");
-					URLConnection connection = url.openConnection();
-					System.out.println("URLConnection");
-					Scanner s = new Scanner(connection.getInputStream());
-					System.out.println("Scanner");
-					while (s.hasNext()) {
-						response += s.next();
-						System.out.println("Response: " + response);
-					}
-					s.close();
-					break;
-				}
+		try {
+			url = new URL("http://" + instance.getPublicDnsName() + ":8000/r.html?");
+			connection = url.openConnection();
+			Scanner s = new Scanner(connection.getInputStream());
+			while (s.hasNext()) {
+				response += s.next();
 			}
+			s.close();
+
+			if (response.equals("OK")) {
+				return true;
+			}
+
+		} catch (IOException e) {
+			System.out.println("HealthCheck : TERMINATING instance > " + instance.getInstanceId());
+			removeInstance(instance);
+			LoadBalancer.removeInstanceInfo(instance.getInstanceId());
+			return false;
 		}
 
+		return true;
 	}
 
 }
