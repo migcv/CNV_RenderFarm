@@ -27,6 +27,10 @@ public class Request {
     public int getRank() {
         return rank;
     }
+    
+    public void setRank(int rank) {
+        this.rank = rank;
+    }
 
 
 	public String getRoff() {

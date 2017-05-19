@@ -158,6 +158,9 @@ public class LoadBalancer {
 		public void handle(HttpExchange t) {
 
 			String response = new String();
+			
+			Request request = null;
+			String instanceID = "";
 
 			try {
 				System.out.println("Handler : Connection > " + t.getRemoteAddress());
@@ -171,19 +174,20 @@ public class LoadBalancer {
 					return;
 				}
 
-				Request request = setResquest(t.getRequestURI().getQuery());
+				request = setResquest(t.getRequestURI().getQuery());
 				int rank = getRequestRank(request);
 				request.setRank(rank);
 
 				if (rank == -1) {
 					System.out.println("Handler : Resquest rank unknown...");
-					String instanceID = getFreeInstance(18);
+					int max_rank = 22;
+					instanceID = getFreeInstance(max_rank);
 					if (instanceID != null) {
 						System.out.println("Handler : Sending resquest to Instance > " + instanceID);
-						currentInstancesRanks.put(instanceID, currentInstancesRanks.get(instanceID) + 18);
+						currentInstancesRanks.put(instanceID, currentInstancesRanks.get(instanceID) + max_rank);
 						currentInstancesResquests.get(instanceID).put(request.getId(), request);
 						redirectRequest(t, currentInstances.get(instanceID).getPublicDnsName());
-						currentInstancesRanks.put(instanceID, currentInstancesRanks.get(instanceID) - 18);
+						currentInstancesRanks.put(instanceID, currentInstancesRanks.get(instanceID) - max_rank);
 						currentInstancesResquests.get(instanceID).remove(request.getId());
 					} else { // Start new Instance
 						System.out.println("Handler : No free instance...");
@@ -193,7 +197,6 @@ public class LoadBalancer {
 							startNewInstance();
 							while (currentInstances.size() == n_instances);
 							System.out.println("Handler : Instances added > " + currentInstances.size());
-
 							instanceID = getFreeInstance(request.getRank());
 							currentInstancesRanks.put(instanceID,
 									currentInstancesRanks.get(instanceID) + request.getRank());
@@ -207,7 +210,7 @@ public class LoadBalancer {
 
 				} else {
 					System.out.println("Handler : Resquest rank > " + rank);
-					String instanceID = getFreeInstance(request.getRank());
+					instanceID = getFreeInstance(request.getRank());
 					if (instanceID != null) {
 						currentInstancesRanks.put(instanceID,
 								currentInstancesRanks.get(instanceID) + request.getRank());
@@ -224,7 +227,6 @@ public class LoadBalancer {
 							startNewInstance();
 							while (currentInstances.size() == n_instances);
 							System.out.println("Handler : Instances added > " + currentInstances.size());
-
 							instanceID = getFreeInstance(request.getRank());
 							currentInstancesRanks.put(instanceID,
 									currentInstancesRanks.get(instanceID) + request.getRank());
@@ -238,6 +240,9 @@ public class LoadBalancer {
 				}
 
 			} catch (Exception e) {
+				currentInstancesRanks.put(instanceID,
+						currentInstancesRanks.get(instanceID) - request.getRank());
+				currentInstancesResquests.get(instanceID).remove(request.getId());
 				try {
 					response = "Handler : ERROR - " + e.getMessage();
 					System.out.println("ERROR - " + e.getMessage());
@@ -268,6 +273,7 @@ public class LoadBalancer {
 					}
 				}
 				
+
 				currentInstances.put(instance.getInstanceId(), instance);
 				currentInstancesRanks.put(instance.getInstanceId(), 0);
 				currentInstancesResquests.put(instance.getInstanceId(), new ConcurrentHashMap<String, Request>());
@@ -291,7 +297,6 @@ public class LoadBalancer {
 				currentInstancesResquests.remove(instaceID);
 				
 				AutoScaler.removeInstance(instance);
-
 			}
 		};
 		thread.start();
@@ -304,25 +309,22 @@ public class LoadBalancer {
 		public void run() {
 			try {
 				while (true) {
-					int instances_available = 0;
 					boolean newInstance = true;
 					for (String instanceID : currentInstances.keySet()) {
-						System.out.println("Health Check : Instance > " + instanceID);
+						System.out.println("Health Check : Checking Instance > " + instanceID);
 						boolean healthy = AutoScaler.healthCheck(currentInstances.get(instanceID));
 						if (healthy) {
 							// Verify if there's an instance thats free to
 							// handle a High Request
 							int instanceRank = currentInstancesRanks.get(instanceID);
 							if ((instanceRank + 22) <= INSTANCE_MAX_RANK) {
-								instances_available++;
+								System.out.println("Health Check : Instance > " + instanceID + " is available");
 								newInstance = false;
 							}
 						}
 					}
-					if (newInstance || currentInstances.size() < 2) { // No instance free for future requests
+					if (newInstance) { // No instance free for future requests
 						if (!AutoScaler.isAnyInstancePending()) {
-							System.out.println("Health Check : No suficient Instaces");
-							System.out.println("Health Check : Instaces > " + currentInstances.size() + " Instances Available > " + instances_available);
 							startNewInstance();
 						}
 					}
@@ -347,7 +349,6 @@ public class LoadBalancer {
 	}
 
 	public static int getRequestRank(Request request) {
-
 		HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
 		Condition condition = new Condition().withComparisonOperator(ComparisonOperator.EQ.toString())
 				.withAttributeValueList(new AttributeValue(request.getFilename()));
