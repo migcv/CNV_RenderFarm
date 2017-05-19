@@ -159,6 +159,9 @@ public class LoadBalancer {
 		public void handle(HttpExchange t) {
 
 			String response = new String();
+			
+			Request request = null;
+			String instanceID = "";
 
 			try {
 				System.out.println("Connection from: " + t.getRemoteAddress());
@@ -172,20 +175,20 @@ public class LoadBalancer {
 					return;
 				}
 
-				Request request = setResquest(t.getRequestURI().getQuery());
+				request = setResquest(t.getRequestURI().getQuery());
 				int rank = getRequestRank(request);
 				request.setRank(rank);
 
 				if (rank == -1) {
 					System.out.println("Resquest rank unknown...");
-
-					String instanceID = getFreeInstance(18);
+					int max_rank = 22;
+					instanceID = getFreeInstance(max_rank);
 					if (instanceID != null) {
 						System.out.println("Sending resquest to Instance > " + instanceID);
-						currentInstancesRanks.put(instanceID, currentInstancesRanks.get(instanceID) + 18);
+						currentInstancesRanks.put(instanceID, currentInstancesRanks.get(instanceID) + max_rank);
 						currentInstancesResquests.get(instanceID).put(request.getId(), request);
 						redirectRequest(t, currentInstances.get(instanceID).getPublicDnsName());
-						currentInstancesRanks.put(instanceID, currentInstancesRanks.get(instanceID) - 18);
+						currentInstancesRanks.put(instanceID, currentInstancesRanks.get(instanceID) - max_rank);
 						currentInstancesResquests.get(instanceID).remove(request.getId());
 					} else { // Start new Instance
 						System.out.println("No free instance...");
@@ -208,7 +211,7 @@ public class LoadBalancer {
 					}
 
 				} else {
-					String instanceID = getFreeInstance(request.getRank());
+					instanceID = getFreeInstance(request.getRank());
 					if (instanceID != null) {
 						currentInstancesRanks.put(instanceID,
 								currentInstancesRanks.get(instanceID) + request.getRank());
@@ -239,6 +242,9 @@ public class LoadBalancer {
 				}
 
 			} catch (Exception e) {
+				currentInstancesRanks.put(instanceID,
+						currentInstancesRanks.get(instanceID) - request.getRank());
+				currentInstancesResquests.get(instanceID).remove(request.getId());
 				try {
 					response = "ERROR: " + e.getMessage();
 					System.out.println("ERROR: " + e.getMessage());

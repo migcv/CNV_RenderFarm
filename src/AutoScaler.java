@@ -99,10 +99,9 @@ public class AutoScaler {
 			if (inst != null && !initalHealthCheck(inst)) { // instance terminated
 				pendingInstance--;											
 				pendingInstances.remove(instanceID);
+				return null;
 
-			} else if (inst != null) {
-				// if passed health check, add to current and remove from
-				// pending
+			} else if (inst != null) { // if passed health check, add to current and remove from pending
 				LoadBalancer.currentInstances.put(instanceID, inst);
 				pendingInstance--;
 				pendingInstances.remove(instanceID);

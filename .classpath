@@ -5,8 +5,8 @@
 	<classpathentry kind="src" path="BIT/samples"/>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.7"/>
-	<classpathentry kind="lib" path="C:/Users/Miguel/Dropbox/IST/CNV/aws-java-sdk-1.11.129/lib/aws-java-sdk-1.11.129.jar"/>
-	<classpathentry kind="lib" path="C:/Users/Miguel/Dropbox/IST/CNV/aws-java-sdk-1.11.129/lib/aws-java-sdk-1.11.129-javadoc.jar"/>
-	<classpathentry kind="lib" path="C:/Users/Miguel/Dropbox/IST/CNV/aws-java-sdk-1.11.129/lib/aws-java-sdk-1.11.129-sources.jar"/>
+	<classpathentry kind="lib" path="/Users/dharuqueshil/CNV_RenderFarm/lib/aws-java-sdk-1.11.114-javadoc.jar"/>
+	<classpathentry kind="lib" path="/Users/dharuqueshil/CNV_RenderFarm/lib/aws-java-sdk-1.11.114-sources.jar"/>
+	<classpathentry kind="lib" path="/Users/dharuqueshil/CNV_RenderFarm/lib/aws-java-sdk-1.11.114.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
